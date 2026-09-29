@@ -1,143 +1,346 @@
-# Sample GenLayer project
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/license/mit/)
-[![Discord](https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white)](https://discord.gg/8Jm4v89VAu)
-[![Telegram](https://img.shields.io/badge/Telegram--T.svg?style=social&logo=telegram)](https://t.me/genlayer)
-[![Twitter](https://img.shields.io/twitter/url/https/twitter.com/yeagerai.svg?style=social&label=Follow%20%40GenLayer)](https://x.com/GenLayer)
-[![GitHub star chart](https://img.shields.io/github/stars/yeagerai/genlayer-project-boilerplate?style=social)](https://star-history.com/#yeagerai/genlayer-js)
+# Crypto Project Scout
 
-## About
-This project includes the boilerplate code for a GenLayer use case implementation, specifically a football bets game.
+[![CI](https://github.com/CaptainTee/crypto-project-scout/actions/workflows/ci.yml/badge.svg)](https://github.com/CaptainTee/crypto-project-scout/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## What's included
-- An example intelligent contract (Football Bets) with web access and LLM integration
-- **Direct mode tests** — fast, in-memory unit tests with web/LLM mocking (~ms per test)
-- **Integration tests** — full end-to-end tests against GenLayer Studio
-- **Contract linting** — static analysis to catch common contract issues before deployment
-- **CI pipeline** — GitHub Actions workflow for linting and direct tests
-- A production-ready Next.js 15 frontend with TypeScript, TanStack Query, and Radix UI
-- Configuration file template and deployment scripts
+Crypto Project Scout is an AI-powered GenLayer dApp for analyzing and classifying early-stage crypto, Web3, blockchain, and crypto-enabled technology projects from their official websites.
 
-## Requirements
-- Python >= 3.12
-- [GenLayer CLI](https://github.com/genlayerlabs/genlayer-cli) globally installed: `npm install -g genlayer`
-- GenLayer Studio (for integration tests and deployment): Install from [Docs](https://docs.genlayer.com/developers/intelligent-contracts/tooling-setup#using-the-genlayer-studio) or use the hosted [GenLayer Studio](https://studio.genlayer.com/)
+The intelligent contract uses GenLayer web access, LLM reasoning, and validator consensus to extract structured project information and store the resulting analysis onchain.
+
+## Live V3 Deployment
+
+**Network:** GenLayer Studio / Studionet
+
+**Contract address:**
+
+```text
+0xB93De863a654495FE6a22F0d7743D77750E61833
+```
+
+**Deployment transaction:**
+
+https://explorer-studio.genlayer.com/tx/0x909549daa9ff23b1da79dc937adfeb0f5bc951b56ec1f93a1a568e25952acf79
+
+V3 adds self-contained source URLs to every new history record and introduces an authorized contract upgrade mechanism for future compatible versions.
+
+## What It Does
+
+A user submits the official website URL of a project.
+
+Crypto Project Scout then:
+
+1. Validates the submitted URL.
+2. Uses GenLayer web rendering to retrieve the website content.
+3. Sends the website content to an LLM with a structured classification prompt.
+4. Uses GenLayer validator consensus to validate core classification fields.
+5. Stores the accepted analysis onchain.
+6. Stores the original source URL with the analysis.
+7. Makes historical analyses available through public read methods.
+8. Displays the stored results in the frontend.
+
+## Analysis Output
+
+Each V3 analysis stores structured data containing:
+
+- Project name
+- Whether the project meaningfully uses crypto
+- Category
+- Blockchain or network
+- Token status
+- Development stage
+- Use case
+- Crypto integration
+- Confidence score
+- Source URL
+
+Example:
+
+```json
+{
+  "project_name": "Endure Network",
+  "uses_crypto": true,
+  "category": "DeFi",
+  "chain": "Bittensor",
+  "token_status": "Announced",
+  "development_stage": "Pre-launch",
+  "use_case": "Decentralized risk intelligence for financial markets.",
+  "crypto_integration": "Uses Bittensor-based decentralized intelligence infrastructure.",
+  "confidence": 94,
+  "url": "https://endure.network/"
+}
+```
+
+Actual LLM outputs may vary between analyses because website content and validator observations can change.
+
+## Supported Categories
+
+The intelligent contract classifies projects into one of:
+
+- Blockchain-L1
+- Blockchain-L2
+- DeFi
+- Wallet
+- Infrastructure
+- AI-Crypto
+- Robotics-Crypto
+- Gaming
+- Other-Crypto
+- Non-Crypto
+- Unclear
+
+## Token Status
+
+Possible values:
+
+- Live
+- Announced
+- Tokenless
+- Unknown
+
+## Development Stage
+
+Possible values:
+
+- Mainnet
+- Testnet
+- Devnet
+- Pre-launch
+- Unknown
+
+## GenLayer Consensus
+
+The project uses `gl.vm.run_nondet_unsafe()` with separate leader and validator execution.
+
+The validator independently analyzes the same project website and checks agreement on the core classification fields:
+
+- `uses_crypto`
+- `category`
+- `chain`
+
+Only an accepted result is persisted by the contract.
+
+Website content is explicitly treated as untrusted input in the LLM prompt so instructions embedded inside analyzed websites are not treated as contract instructions.
+
+## Onchain History
+
+V3 stores analysis history using GenLayer persistent storage.
+
+Relevant public read methods include:
+
+```text
+get_last_url()
+get_last_result()
+get_analysis_count()
+get_analysis_at(index)
+get_latest_for_url(url)
+```
+
+The frontend loads this history and displays previous analyses in reverse chronological order.
+
+Every new V3 history record contains its original source URL.
+
+## Upgradability
+
+V3 registers the deploying wallet as an authorized upgrader during construction.
+
+The contract exposes:
+
+```text
+upgrade(new_code)
+```
+
+This allows future compatible contract code versions to replace the current code while preserving the existing V3 contract storage layout.
+
+Future upgrades must maintain storage compatibility.
 
 ## Project Structure
 
-```
-contracts/              # Python intelligent contracts
+```text
+contracts/
+  crypto_project_scout.py        Intelligent contract
+
 tests/
-  direct/               # Fast in-memory tests (no Studio required)
-    test_create_bet.py   # Bet creation logic
-    test_resolve_bet.py  # Bet resolution with web/LLM mocks
-    test_views.py        # Read-only view methods
-  integration/           # Full tests against GenLayer Studio
-    test_football_bets.py
-    fixtures.py          # Expected state fixtures
-frontend/               # Next.js 15 app (TypeScript, TanStack Query, Radix UI)
-deploy/                 # TypeScript deployment scripts
-gltest.config.yaml      # Test runner network configuration
-pyproject.toml          # Python/pytest configuration
-.github/workflows/      # CI pipeline
+  direct/
+    test_crypto_project_scout.py Scout-specific direct tests
+    test_patterns.py             GenLayer behavior/pattern tests
+
+frontend/
+  app/
+    page.tsx                     Main Scout interface
+  lib/
+    contracts/
+      CryptoProjectScout.ts      Contract client
+    genlayer/                    Wallet, RPC, fee and client helpers
+
+deploy/
+  deployScript.ts                Contract deployment script
+
+.github/workflows/
+  ci.yml                         GitHub Actions CI
+
+gltest.config.yaml               GenLayer test configuration
+requirements.txt                 Python dependencies
 ```
 
-## Quick Start
+## Requirements
 
-### 1. Set up Python environment
+- Python 3.12+
+- Node.js
+- npm
+- GenLayer CLI
+- GenLayer test/lint tooling
+- MetaMask or another compatible wallet
+- Testnet GEN for write transactions
 
-```shell
-python3 -m venv .venv
+Install the GenLayer CLI globally:
+
+```bash
+npm install -g genlayer
+```
+
+## Python Setup
+
+This project can be set up with `uv`:
+
+```bash
+uv venv --python 3.12 .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 ```
 
-### 2. Lint your contracts
+Verify:
 
-Run the GenVM linter to catch issues before deployment:
-
-```shell
-genvm-lint check contracts/football_bets.py
+```bash
+python --version
+genlayer --version
 ```
 
-The linter catches:
-- Forbidden imports and non-deterministic calls
-- Invalid storage types (must use `TreeMap`, `DynArray`, `u256`, etc.)
-- Missing decorators and return type annotations
-- Non-deterministic operations outside equivalence principle blocks
-- And [20+ other rules](https://github.com/genlayerlabs/genvm-linter)
+## Contract Linting
 
-### 3. Run direct mode tests
+Run:
 
-Direct mode tests run contracts in-memory without needing GenLayer Studio. They use mocks for web requests and LLM calls, giving you fast feedback (~milliseconds per test):
+```bash
+genvm-lint check contracts/crypto_project_scout.py
+```
 
-```shell
+## Direct Tests
+
+Run the Scout-specific tests:
+
+```bash
+pytest tests/direct/test_crypto_project_scout.py -v
+```
+
+Run the complete direct test suite:
+
+```bash
 pytest tests/direct/ -v
 ```
 
-Direct mode features used in these tests:
-- `direct_deploy("contracts/file.py")` — deploy contract in memory
-- `direct_vm.sender = address` — set transaction sender
-- `direct_vm.mock_web(pattern, response)` — mock HTTP/render calls
-- `direct_vm.mock_llm(pattern, response)` — mock LLM responses
-- `direct_vm.expect_revert("message")` — assert expected failures
-- `direct_vm.clear_mocks()` — reset mocks between calls
+At the current V3 checkpoint, the direct suite contains 34 passing tests.
 
-### 4. Deploy the contract
+## Frontend Setup
 
-1. Choose your network: `genlayer network`
-2. Deploy: `genlayer deploy` (runs the script in `/deploy/deployScript.ts`)
+Move into the frontend:
 
-### 5. Run integration tests
-
-Integration tests deploy the contract to GenLayer Studio and test with real consensus:
-
-```shell
-gltest tests/integration/ -v -s
+```bash
+cd frontend
 ```
 
-These require GenLayer Studio running (local or hosted).
+Install dependencies:
 
-### 6. Set up the frontend
-
-1. Copy `frontend/.env.example` to `frontend/.env`
-2. Add your deployed contract address as `NEXT_PUBLIC_CONTRACT_ADDRESS`
-3. Run:
-
-```shell
-cd frontend
+```bash
 npm install
+```
+
+Create your local environment configuration:
+
+```bash
+cp .env.example .env.local
+```
+
+Set:
+
+```text
+NEXT_PUBLIC_CONTRACT_ADDRESS=0xYOUR_DEPLOYED_CONTRACT_ADDRESS
+NEXT_PUBLIC_GENLAYER_RPC_URL=https://studio.genlayer.com/api
+NEXT_PUBLIC_GENLAYER_CHAIN_ID=61999
+NEXT_PUBLIC_GENLAYER_CHAIN_NAME=GenLayer Studio
+NEXT_PUBLIC_GENLAYER_SYMBOL=GEN
+```
+
+For the current V3 Studionet deployment, the contract address is:
+
+```text
+0xB93De863a654495FE6a22F0d7743D77750E61833
+```
+
+Do not commit `.env.local`.
+
+## Run the Frontend
+
+```bash
 npm run dev
 ```
 
-The app will be available at http://localhost:3000/.
+Then open:
 
-## How the Football Bets Contract Works
+```text
+http://localhost:3000
+```
 
-1. **Creating Bets**: Users bet on a football match by providing the game date, teams, and predicted winner.
-2. **Resolving Bets**: After the match, the contract fetches results from BBC Sport, uses an LLM to extract the score, and validates via the equivalence principle.
-3. **Points**: Correct predictions earn points. Users can query their points or the leaderboard.
+## Frontend Checks
 
-## Testing Strategy
+Type-check the frontend:
 
-| Test Type | Command | Speed | Requires Studio |
-|-----------|---------|-------|-----------------|
-| **Lint** | `genvm-lint check contracts/*.py` | ~250ms | No |
-| **Direct** | `pytest tests/direct/ -v` | ~ms/test | No |
-| **Integration** | `gltest tests/integration/ -v -s` | ~min/test | Yes |
+```bash
+npm run lint
+```
 
-**Recommended workflow:**
-1. Lint after every contract change
-2. Run direct tests frequently during development
-3. Run integration tests before deployment to verify consensus behavior
+Build the production frontend:
 
-For AI coding agents (Claude Code, Cursor, etc.), the linter and direct tests provide the fast feedback loop needed for iterative development without requiring a running Studio instance.
+```bash
+npm run build
+```
 
-## Community
-- **[Discord](https://discord.gg/8Jm4v89VAu)**: Discussions, support, and announcements
-- **[Telegram](https://t.me/genlayer)**: Informal chats and quick updates
+## CI
 
-## Documentation
-For detailed information, see our [documentation](https://docs.genlayer.com/).
+GitHub Actions automatically runs contract linting and the direct test suite on pushes to the repository.
+
+Repository:
+
+https://github.com/CaptainTee/crypto-project-scout
+
+## Security Considerations
+
+Project websites are external and untrusted.
+
+The contract prompt instructs validators to treat retrieved website content only as evidence about the analyzed project and to ignore instructions, prompts, commands, or requests embedded in that content.
+
+The submitted URL itself is stored directly by contract logic rather than being generated by the LLM.
+
+## Version History
+
+### V3
+
+- Stores the submitted project URL inside each new historical analysis
+- Displays source URLs in the frontend
+- Adds authorized contract upgradability
+- Uses a fresh GenLayer Studionet deployment
+- Current contract:
+  `0xB93De863a654495FE6a22F0d7743D77750E61833`
+
+### V2
+
+- Added persistent analysis history
+- Added lookup of latest analysis by URL
+- Added richer crypto project classification fields
+
+### V1
+
+- Initial Crypto Project Scout intelligent contract
+- Website rendering and LLM-based project classification
 
 ## License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE).
