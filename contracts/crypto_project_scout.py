@@ -17,6 +17,11 @@ class CryptoProjectScout(gl.Contract):
         self.last_result = "{}"
         self.analysis_count = u32(0)
 
+        root = gl.storage.Root.get()
+        root.upgraders.get().append(
+            gl.message.sender_address
+        )
+
     @gl.public.write
     def analyze_project(self, url: str) -> None:
         if not (
@@ -197,6 +202,13 @@ WEBSITE CONTENT:
         self.analysis_count = u32(
             int(self.analysis_count) + 1
         )
+
+    @gl.public.write
+    def upgrade(self, new_code: bytes) -> None:
+        root = gl.storage.Root.get()
+        code = root.code.get()
+        code.truncate()
+        code.extend(new_code)
 
     @gl.public.view
     def get_last_url(self) -> str:
