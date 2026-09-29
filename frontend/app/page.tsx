@@ -322,6 +322,27 @@ function ResultCard({
         </div>
       </div>
 
+      <div>
+        <div className="text-sm text-muted-foreground mb-1">
+          Source URL
+        </div>
+
+        {result.url ? (
+          <a
+            href={result.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline break-all"
+          >
+            {result.url}
+          </a>
+        ) : (
+          <p className="text-muted-foreground">
+            Legacy record — URL was not stored in V2.
+          </p>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <Field
           title="Uses Crypto"

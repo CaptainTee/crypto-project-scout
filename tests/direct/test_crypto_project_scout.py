@@ -83,7 +83,10 @@ def test_analyze_project_stores_result(
         contract.get_last_result()
     )
 
-    assert stored == expected
+    expected_with_url = dict(expected)
+    expected_with_url["url"] = url
+
+    assert stored == expected_with_url
     assert contract.get_analysis_count() == 1
 
 
@@ -112,8 +115,11 @@ def test_analysis_history(
         contract.get_analysis_at(1)
     )
 
-    assert first == expected
-    assert second == expected
+    expected_with_url = dict(expected)
+    expected_with_url["url"] = url
+
+    assert first == expected_with_url
+    assert second == expected_with_url
 
 
 def test_latest_result_by_url(
@@ -134,7 +140,10 @@ def test_latest_result_by_url(
         contract.get_latest_for_url(url)
     )
 
-    assert result == expected
+    expected_with_url = dict(expected)
+    expected_with_url["url"] = url
+
+    assert result == expected_with_url
 
 
 def test_missing_url_returns_empty(

@@ -181,8 +181,11 @@ WEBSITE CONTENT:
             validate,
         )
 
+        stored_result = dict(result)
+        stored_result["url"] = url
+
         result_json = json.dumps(
-            result,
+            stored_result,
             sort_keys=True,
         )
 

@@ -6,6 +6,7 @@ import {
 } from "../genlayer/fees";
 
 export interface ScoutResult {
+  url?: string;
   project_name: string;
   uses_crypto: boolean;
   category: string;
