@@ -236,7 +236,7 @@ export default function HomePage() {
             </div>
 
             <div className="text-xl font-bold mt-2">
-              V2
+              V3
             </div>
           </div>
         </section>
