@@ -1,109 +1,236 @@
 "use client";
 
-import { Navbar } from "@/components/Navbar";
-import { BetsTable } from "@/components/BetsTable";
-import { Leaderboard } from "@/components/Leaderboard";
+import { useMemo, useState } from "react";
+import { Search, Wallet, CheckCircle2 } from "lucide-react";
+import CryptoProjectScout, {
+  ScoutResult,
+} from "@/lib/contracts/CryptoProjectScout";
+import {
+  getContractAddress,
+  getStudioUrl,
+} from "@/lib/genlayer/client";
+import { useWallet } from "@/lib/genlayer/wallet";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export default function HomePage() {
-  return (
-    <div className="min-h-screen flex flex-col">
-      {/* Navbar */}
-      <Navbar />
+  const {
+    address,
+    isConnected,
+    connectWallet,
+    disconnectWallet,
+  } = useWallet();
 
-      {/* Main Content - Padding to account for fixed navbar */}
-      <main className="flex-grow pt-20 pb-12 px-4 md:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          {/* Hero Section */}
-          <div className="text-center mb-8 animate-fade-in">
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-4">
-              Football Prediction Betting
+  const [url, setUrl] = useState("");
+  const [result, setResult] = useState<ScoutResult | null>(null);
+  const [analysisCount, setAnalysisCount] = useState(0);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [status, setStatus] = useState("");
+
+  const contract = useMemo(() => {
+    const contractAddress = getContractAddress();
+
+    if (!contractAddress) {
+      return null;
+    }
+
+    return new CryptoProjectScout(
+      contractAddress,
+      address,
+      getStudioUrl()
+    );
+  }, [address]);
+
+  const handleAnalyze = async () => {
+    if (!contract) {
+      setStatus("Contract address is not configured.");
+      return;
+    }
+
+    if (!isConnected) {
+      setStatus("Connect your wallet first.");
+      return;
+    }
+
+    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+      setStatus("Enter a valid http:// or https:// URL.");
+      return;
+    }
+
+    try {
+      setIsAnalyzing(true);
+      setStatus("Submitting analysis to GenLayer validators...");
+
+      await contract.analyzeProject(url);
+
+      setStatus("Consensus accepted. Loading result...");
+
+      const latest = await contract.getLatestForUrl(url);
+      const count = await contract.getAnalysisCount();
+
+      setResult(latest);
+      setAnalysisCount(count);
+      setStatus("Analysis completed successfully.");
+    } catch (err: any) {
+      console.error(err);
+      setStatus(err?.message || "Analysis failed.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  return (
+    <main className="min-h-screen px-4 py-10 md:px-8">
+      <div className="max-w-5xl mx-auto space-y-8">
+        <header className="flex flex-col md:flex-row gap-4 md:items-center md:justify-between">
+          <div>
+            <h1 className="text-4xl md:text-5xl font-bold">
+              Crypto Project Scout
             </h1>
-            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
-              AI-powered football match predictions on GenLayer blockchain.
-              <br />
-              Create bets, make predictions, and compete for points.
+            <p className="text-muted-foreground mt-2">
+              AI-powered crypto project classification using GenLayer consensus.
             </p>
           </div>
 
-          {/* Main Grid Layout - 2/1 columns on desktop, stacked on mobile */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
-            {/* Left Column - Bets Table (67% on desktop) */}
-            <div className="lg:col-span-8 animate-slide-up">
-              <BetsTable />
-            </div>
+          <Button
+            variant={isConnected ? "outline" : "gradient"}
+            onClick={() =>
+              isConnected ? disconnectWallet() : connectWallet()
+            }
+          >
+            <Wallet className="w-4 h-4" />
+            {isConnected
+              ? `${address?.slice(0, 6)}...${address?.slice(-4)}`
+              : "Connect Wallet"}
+          </Button>
+        </header>
 
-            {/* Right Column - Leaderboard (33% on desktop) */}
-            <div className="lg:col-span-4 animate-slide-up" style={{ animationDelay: "100ms" }}>
-              <Leaderboard />
+        <section className="brand-card p-6 space-y-5">
+          <div>
+            <h2 className="text-2xl font-bold">Analyze a project</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Enter an official project website. GenLayer validators will
+              analyze and classify it.
+            </p>
+          </div>
+
+          <div className="flex flex-col md:flex-row gap-3">
+            <Input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://example.com/"
+              className="h-11"
+            />
+
+            <Button
+              variant="gradient"
+              className="h-11"
+              disabled={isAnalyzing}
+              onClick={handleAnalyze}
+            >
+              <Search className="w-4 h-4" />
+              {isAnalyzing ? "Analyzing..." : "Analyze Project"}
+            </Button>
+          </div>
+
+          {status && (
+            <div className="text-sm text-muted-foreground">
+              {status}
+            </div>
+          )}
+        </section>
+
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="brand-card p-5">
+            <div className="text-sm text-muted-foreground">
+              Stored analyses
+            </div>
+            <div className="text-3xl font-bold mt-2">
+              {analysisCount}
             </div>
           </div>
 
-          {/* Info Section */}
-          <div className="mt-8 glass-card p-6 md:p-8 animate-fade-in" style={{ animationDelay: "200ms" }}>
-            <h2 className="text-2xl font-bold mb-4">How it Works</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="space-y-2">
-                <div className="text-accent font-bold text-lg">1. Create a Bet</div>
-                <p className="text-sm text-muted-foreground">
-                  Connect your wallet and create a football match prediction. Choose the teams, date, and your predicted winner.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <div className="text-accent font-bold text-lg">2. Wait for Resolution</div>
-                <p className="text-sm text-muted-foreground">
-                  After the match, the bet creator resolves the bet. GenLayer's AI verifies the actual match result.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <div className="text-accent font-bold text-lg">3. Earn Points</div>
-                <p className="text-sm text-muted-foreground">
-                  Correct predictions earn you points. Climb the leaderboard and prove your football knowledge!
-                </p>
-              </div>
+          <div className="brand-card p-5">
+            <div className="text-sm text-muted-foreground">
+              Network
+            </div>
+            <div className="text-xl font-bold mt-2">
+              GenLayer Studio
             </div>
           </div>
-        </div>
-      </main>
 
-      {/* Footer */}
-      <footer className="border-t border-white/10 py-2">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
-          <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
-              <a
-                href="https://genlayer.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-accent transition-colors"
-              >
-                Powered by GenLayer
-              </a>
-              <a
-                href="https://studio.genlayer.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-accent transition-colors"
-              >
-                Studio
-              </a>
-              <a
-                href="https://docs.genlayer.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-accent transition-colors"
-              >
-                Docs
-              </a>
-              <a
-                href="https://github.com/genlayerlabs/genlayer-project-boilerplate"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-accent transition-colors"
-              >
-                GitHub
-              </a>
+          <div className="brand-card p-5">
+            <div className="text-sm text-muted-foreground">
+              Contract
+            </div>
+            <div className="text-xl font-bold mt-2">
+              V2
+            </div>
           </div>
-        </div>
-      </footer>
+        </section>
+
+        {result && (
+          <section className="brand-card p-6 space-y-6">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="text-green-500" />
+              <h2 className="text-2xl font-bold">
+                {result.project_name}
+              </h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <Field
+                title="Uses Crypto"
+                value={result.uses_crypto ? "Yes" : "No"}
+              />
+              <Field title="Category" value={result.category} />
+              <Field title="Chain" value={result.chain} />
+              <Field title="Token Status" value={result.token_status} />
+              <Field
+                title="Development Stage"
+                value={result.development_stage}
+              />
+              <Field
+                title="Confidence"
+                value={`${result.confidence}%`}
+              />
+            </div>
+
+            <div>
+              <div className="text-sm text-muted-foreground mb-1">
+                Use Case
+              </div>
+              <p>{result.use_case}</p>
+            </div>
+
+            <div>
+              <div className="text-sm text-muted-foreground mb-1">
+                Crypto Integration
+              </div>
+              <p>{result.crypto_integration}</p>
+            </div>
+          </section>
+        )}
+      </div>
+    </main>
+  );
+}
+
+function Field({
+  title,
+  value,
+}: {
+  title: string;
+  value: string;
+}) {
+  return (
+    <div>
+      <div className="text-sm text-muted-foreground">
+        {title}
+      </div>
+      <div className="font-semibold mt-1">
+        {value}
+      </div>
     </div>
   );
 }
