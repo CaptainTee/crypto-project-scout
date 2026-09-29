@@ -239,6 +239,18 @@ pytest tests/direct/ -v
 
 At the current V3 checkpoint, the direct suite contains 34 passing tests.
 
+## Studionet Integration Test
+
+A full end-to-end integration test is also included:
+
+```bash
+gltest tests/integration/test_crypto_project_scout.py -v -s --network studionet
+```
+
+This test deploys a fresh temporary `CryptoProjectScout` instance to GenLayer Studionet, performs a real website/LLM/validator-consensus analysis, and verifies that the resulting V3 analysis history is persisted correctly.
+
+The integration test depends on the hosted Studionet and external validator execution, so it is intentionally kept separate from the deterministic GitHub CI suite.
+
 ## Frontend Setup
 
 Move into the frontend:
