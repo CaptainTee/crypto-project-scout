@@ -1,4 +1,6 @@
 import json
+
+
 def test_initial_state(direct_deploy):
     contract = direct_deploy(
         "contracts/crypto_project_scout.py"
@@ -6,6 +8,7 @@ def test_initial_state(direct_deploy):
 
     assert contract.get_last_url() == ""
     assert contract.get_last_result() == "{}"
+    assert contract.get_analysis_count() == 0
 
 
 def test_invalid_url_is_rejected(
@@ -22,6 +25,44 @@ def test_invalid_url_is_rejected(
         contract.analyze_project("endure.network")
 
 
+def _setup_endure_mocks(direct_vm):
+    project_result = {
+        "project_name": "Endure Network",
+        "uses_crypto": True,
+        "category": "Infrastructure",
+        "chain": "Bittensor",
+        "token_status": "Live",
+        "development_stage": "Mainnet",
+        "use_case": (
+            "Decentralized risk intelligence "
+            "for financial markets."
+        ),
+        "crypto_integration": (
+            "Uses Bittensor infrastructure "
+            "for decentralized intelligence."
+        ),
+        "confidence": 95,
+    }
+
+    direct_vm.mock_web(
+        r".*endure\.network.*",
+        {
+            "status": 200,
+            "body": (
+                "Endure Network is a decentralized risk "
+                "intelligence network using Bittensor."
+            ),
+        },
+    )
+
+    direct_vm.mock_llm(
+        r".*Classify the project.*",
+        json.dumps(project_result),
+    )
+
+    return project_result
+
+
 def test_analyze_project_stores_result(
     direct_vm,
     direct_deploy,
@@ -30,54 +71,82 @@ def test_analyze_project_stores_result(
         "contracts/crypto_project_scout.py"
     )
 
-    project_result = {
-        "project_name": "Endure Network",
-        "uses_crypto": True,
-        "category": "Infrastructure",
-        "chain": "Bittensor",
-        "token_status": "Live",
-        "summary": (
-            "A decentralized risk intelligence network "
-            "using Bittensor."
-        ),
-        "confidence": 95,
-    }
+    expected = _setup_endure_mocks(direct_vm)
 
-    # Pretend this content came from Endure's website.
-    direct_vm.mock_web(
-        r".*endure\.network.*",
-        {
-            "status": 200,
-            "body": (
-                "Endure Network is a decentralized risk "
-                "intelligence network built around Bittensor. "
-                "Its Forge product provides decentralized "
-                "risk parameters for financial markets."
-            ),
-        },
-    )
+    url = "https://endure.network/"
 
-    # Pretend the GenLayer LLM produced this structured analysis.
-    direct_vm.mock_llm(
-        r".*Classify the project.*",
-        json.dumps(project_result),
-    )
+    contract.analyze_project(url)
 
-    contract.analyze_project(
-        "https://endure.network/"
-    )
-
-    assert (
-        contract.get_last_url()
-        == "https://endure.network/"
-    )
+    assert contract.get_last_url() == url
 
     stored = json.loads(
         contract.get_last_result()
     )
 
-    assert stored == project_result
-    assert stored["uses_crypto"] is True
-    assert stored["category"] == "Infrastructure"
-    assert stored["chain"] == "Bittensor"
-    assert stored["confidence"] == 95
+    assert stored == expected
+    assert contract.get_analysis_count() == 1
+
+
+def test_analysis_history(
+    direct_vm,
+    direct_deploy,
+):
+    contract = direct_deploy(
+        "contracts/crypto_project_scout.py"
+    )
+
+    expected = _setup_endure_mocks(direct_vm)
+
+    url = "https://endure.network/"
+
+    contract.analyze_project(url)
+    contract.analyze_project(url)
+
+    assert contract.get_analysis_count() == 2
+
+    first = json.loads(
+        contract.get_analysis_at(0)
+    )
+
+    second = json.loads(
+        contract.get_analysis_at(1)
+    )
+
+    assert first == expected
+    assert second == expected
+
+
+def test_latest_result_by_url(
+    direct_vm,
+    direct_deploy,
+):
+    contract = direct_deploy(
+        "contracts/crypto_project_scout.py"
+    )
+
+    expected = _setup_endure_mocks(direct_vm)
+
+    url = "https://endure.network/"
+
+    contract.analyze_project(url)
+
+    result = json.loads(
+        contract.get_latest_for_url(url)
+    )
+
+    assert result == expected
+
+
+def test_missing_url_returns_empty(
+    direct_deploy,
+):
+    contract = direct_deploy(
+        "contracts/crypto_project_scout.py"
+    )
+
+    assert (
+        contract.get_latest_for_url(
+            "https://example.com/"
+        )
+        == ""
+    )

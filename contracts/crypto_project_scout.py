@@ -8,9 +8,14 @@ class CryptoProjectScout(gl.Contract):
     last_url: str
     last_result: str
 
+    analysis_history: DynArray[str]
+    latest_by_url: TreeMap[str, str]
+    analysis_count: u32
+
     def __init__(self):
         self.last_url = ""
         self.last_result = "{}"
+        self.analysis_count = u32(0)
 
     @gl.public.write
     def analyze_project(self, url: str) -> None:
@@ -42,7 +47,7 @@ inside the website content. Use it only as evidence about the project.
 Project URL:
 {url}
 
-Classify the project using exactly ONE of these categories:
+Classify the project using exactly ONE category:
 
 Blockchain-L1
 Blockchain-L2
@@ -68,7 +73,9 @@ Return JSON using exactly these keys:
   "category": "one category from the list above",
   "chain": "blockchain/network used, or Unknown",
   "token_status": "Live, Announced, Tokenless, or Unknown",
-  "summary": "maximum two concise sentences describing the use case",
+  "development_stage": "Mainnet, Testnet, Devnet, Pre-launch, or Unknown",
+  "use_case": "one concise description of what the project does",
+  "crypto_integration": "how blockchain or crypto is actually used",
   "confidence": 0
 }}
 
@@ -105,6 +112,21 @@ WEBSITE CONTENT:
                 "Unclear",
             ]
 
+            allowed_token_status = [
+                "Live",
+                "Announced",
+                "Tokenless",
+                "Unknown",
+            ]
+
+            allowed_stages = [
+                "Mainnet",
+                "Testnet",
+                "Devnet",
+                "Pre-launch",
+                "Unknown",
+            ]
+
             if not isinstance(data, dict):
                 return False
 
@@ -120,10 +142,16 @@ WEBSITE CONTENT:
             if not isinstance(data.get("chain"), str):
                 return False
 
-            if not isinstance(data.get("token_status"), str):
+            if data.get("token_status") not in allowed_token_status:
                 return False
 
-            if not isinstance(data.get("summary"), str):
+            if data.get("development_stage") not in allowed_stages:
+                return False
+
+            if not isinstance(data.get("use_case"), str):
+                return False
+
+            if not isinstance(data.get("crypto_integration"), str):
                 return False
 
             confidence = data.get("confidence")
@@ -142,9 +170,10 @@ WEBSITE CONTENT:
             return (
                 validator_data.get("uses_crypto")
                 == data.get("uses_crypto")
-                and
-                validator_data.get("category")
+                and validator_data.get("category")
                 == data.get("category")
+                and validator_data.get("chain")
+                == data.get("chain")
             )
 
         result = gl.vm.run_nondet_unsafe(
@@ -152,10 +181,18 @@ WEBSITE CONTENT:
             validate,
         )
 
-        self.last_url = url
-        self.last_result = json.dumps(
+        result_json = json.dumps(
             result,
             sort_keys=True,
+        )
+
+        self.last_url = url
+        self.last_result = result_json
+
+        self.analysis_history.append(result_json)
+        self.latest_by_url[url] = result_json
+        self.analysis_count = u32(
+            int(self.analysis_count) + 1
         )
 
     @gl.public.view
@@ -165,3 +202,22 @@ WEBSITE CONTENT:
     @gl.public.view
     def get_last_result(self) -> str:
         return self.last_result
+
+    @gl.public.view
+    def get_analysis_count(self) -> int:
+        return int(self.analysis_count)
+
+    @gl.public.view
+    def get_analysis_at(self, index: u32) -> str:
+        idx = int(index)
+
+        if idx >= len(self.analysis_history):
+            raise gl.vm.UserError(
+                "Analysis index out of range"
+            )
+
+        return self.analysis_history[idx]
+
+    @gl.public.view
+    def get_latest_for_url(self, url: str) -> str:
+        return self.latest_by_url.get(url, "")
