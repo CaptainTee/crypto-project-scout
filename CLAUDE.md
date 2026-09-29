@@ -10,7 +10,7 @@ genvm-lint check contracts/crypto_project_scout.py    # Lint a contract
 
 # Testing
 pytest tests/direct/ -v                        # Direct mode tests (fast, no Studio)
-gltest tests/integration/ -v -s                # Integration tests (requires Studio)
+gltest tests/integration/ -v -s --network studionet  # Integration tests on Studionet
 
 # Deployment
 genlayer network                               # Select network
@@ -31,7 +31,7 @@ frontend/           # Next.js 15 app (TypeScript, TanStack Query, Radix UI)
 deploy/             # TypeScript deployment scripts
 ```
 
-**Frontend stack**: Next.js 15, React 19, TypeScript, Tailwind CSS, TanStack Query, Wagmi/Viem, MetaMask wallet integration.
+**Frontend stack**: Next.js 16, React 19, TypeScript, Tailwind CSS, TanStack Query, Wagmi/Viem, MetaMask wallet integration.
 
 ## Development Workflow
 
@@ -39,7 +39,7 @@ deploy/             # TypeScript deployment scripts
 2. Lint: `genvm-lint check contracts/your_contract.py`
 3. Test direct: `pytest tests/direct/ -v`
 4. Start Studio and deploy: `genlayer deploy`
-5. Test integration: `gltest tests/integration/ -v -s`
+5. Test integration: `gltest tests/integration/ -v -s --network studionet`
 6. Run frontend: `cd frontend && npm run dev`
 
 ## Contract Development
