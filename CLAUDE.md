@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Linting
-genvm-lint check contracts/football_bets.py    # Lint a contract
+genvm-lint check contracts/crypto_project_scout.py    # Lint a contract
 
 # Testing
 pytest tests/direct/ -v                        # Direct mode tests (fast, no Studio)
@@ -113,8 +113,7 @@ The GenVM linter catches contract issues before deployment:
 
 ## Frontend Patterns
 
-- Contract interactions: `frontend/lib/contracts/FootballBets.ts`
-- React hooks: `frontend/lib/hooks/useFootballBets.ts`
+- Contract interactions: `frontend/lib/contracts/CryptoProjectScout.ts`
 - Wallet context: `frontend/lib/genlayer/WalletProvider.tsx`
 - GenLayer client: `frontend/lib/genlayer/client.ts`
 
