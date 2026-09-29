@@ -1,7 +1,7 @@
 {
-  "name": "genlayer-football-betting",
+  "name": "crypto-project-scout",
   "version": "1.0.0",
-  "description": "GenLayer Football Betting - AI-powered prediction betting on GenLayer blockchain.",
+  "description": "AI-powered crypto project scouting and classification using GenLayer consensus.",
   "main": "index.js",
   "scripts": {
     "dev": "next dev",

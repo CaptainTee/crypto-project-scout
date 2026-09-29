@@ -1,16 +1,9 @@
 {
-  "name": "GenLayer Football Market",
-  "short_name": "GenLayer Market",
-  "description": "AI-powered football match predictions on GenLayer blockchain",
+  "name": "Crypto Project Scout",
+  "short_name": "Project Scout",
+  "description": "AI-powered crypto project scouting and classification using GenLayer consensus.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#000000",
-  "theme_color": "#9B6AF6",
-  "icons": [
-    {
-      "src": "/favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
-    }
-  ]
+  "theme_color": "#9B6AF6"
 }
