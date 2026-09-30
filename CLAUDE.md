@@ -27,7 +27,7 @@ contracts/          # Python intelligent contracts
 tests/
   direct/           # Fast in-memory tests with web/LLM mocks
   integration/      # Full tests against GenLayer Studio
-frontend/           # Next.js 15 app (TypeScript, TanStack Query, Radix UI)
+frontend/           # Next.js 16 app (TypeScript, TanStack Query, Radix UI)
 deploy/             # TypeScript deployment scripts
 ```
 

@@ -1,38 +1,13 @@
 @import "tailwindcss";
 
-/* GenLayer Brand Guidelines 2025 - Typography via local fonts */
-/* --font-body / --font-display: Switzer */
-
-@font-face {
-  font-family: 'Switzer';
-  src: url('/fonts/Switzer-Light.woff2') format('woff2');
-  font-weight: 300;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Switzer';
-  src: url('/fonts/Switzer-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Switzer';
-  src: url('/fonts/Switzer-Bold.woff2') format('woff2');
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
+/* Typography: system font stack */
 
 @custom-variant dark (&:is(.dark *));
 
 /* GenLayer Brand Colors 2025 */
 :root {
-  --font-body: 'Switzer';
-  --font-display: 'Switzer';
+  --font-body: system-ui;
+  --font-display: system-ui;
 
   /* Base colors - keep black background for dark theme */
   --background: oklch(0 0 0);
@@ -313,27 +288,27 @@
   }
 
   /* Interactive Panel Button States */
-  .bet-button-unselected {
+  .panel-button-unselected {
     background: oklch(0.25 0.08 265 / 0.5);
     border: 1px solid oklch(0.30 0.10 265 / 0.4);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  .bet-button-unselected-a:hover {
+  .panel-button-unselected-a:hover {
     background: oklch(0.28 0.12 300 / 0.6);
     border-color: oklch(0.65 0.22 300 / 0.6);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px 0 oklch(0.65 0.22 300 / 0.2);
   }
 
-  .bet-button-unselected-b:hover {
+  .panel-button-unselected-b:hover {
     background: oklch(0.28 0.15 265 / 0.6);
     border-color: oklch(0.55 0.37 265 / 0.6);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px 0 oklch(0.55 0.37 265 / 0.2);
   }
 
-  .bet-button-selected-a {
+  .panel-button-selected-a {
     background: oklch(0.25 0.08 265 / 0.6);
     color: oklch(0.98 0 0);
     border: 1px solid oklch(0.65 0.22 300);
@@ -341,7 +316,7 @@
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  .bet-button-selected-b {
+  .panel-button-selected-b {
     background: oklch(0.25 0.08 265 / 0.6);
     color: oklch(0.98 0 0);
     border: 1px solid oklch(0.55 0.37 265);

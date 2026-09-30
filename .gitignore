@@ -19,9 +19,7 @@ __pycache__/
 /frontend/.next
 /frontend/next-env.d.ts
 /frontend/bun.lock
-/frontend/package-lock.json
 *.compiled.js
-package-lock.json
 
 frontend/.env.local
 *.tsbuildinfo

@@ -237,7 +237,7 @@ Run the complete direct test suite:
 pytest tests/direct/ -v
 ```
 
-At the current V3 checkpoint, the direct suite contains 34 passing tests.
+At the current V3 checkpoint, the direct suite contains 34 passing tests: 6 Scout-specific behavior tests and 28 GenLayer pattern/regression tests.
 
 ## Studionet Integration Test
 
@@ -317,7 +317,7 @@ npm run build
 
 ## CI
 
-GitHub Actions automatically runs contract linting and the direct test suite on pushes to the repository.
+GitHub Actions automatically runs contract linting, the direct test suite, frontend type-checking, and a production frontend build on pushes and pull requests targeting `main`.
 
 Repository:
 
