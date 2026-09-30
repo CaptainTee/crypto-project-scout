@@ -9,6 +9,10 @@ The intelligent contract uses GenLayer web access, LLM reasoning, and validator 
 
 ## Live V3 Deployment
 
+**Live app:**
+
+https://crypto-project-scout.vercel.app
+
 **Network:** GenLayer Studio / Studionet
 
 **Contract address:**
