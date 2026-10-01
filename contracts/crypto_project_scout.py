@@ -52,7 +52,7 @@ class CryptoProjectScout(gl.Contract):
                 try:
                     response = gl.nondet.web.get(url)
 
-                    status_code = int(response.status_code)
+                    status_code = int(response.status)
 
                     if (
                         status_code < 200
