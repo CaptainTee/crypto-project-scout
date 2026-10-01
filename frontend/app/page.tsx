@@ -101,6 +101,7 @@ export default function HomePage() {
 
     try {
       setIsAnalyzing(true);
+      setResult(null);
       setStatus(
         "Submitting analysis to GenLayer validators..."
       );
@@ -141,8 +142,21 @@ export default function HomePage() {
       );
     } catch (err: any) {
       console.error(err);
+
+      const message = String(err?.message || "");
+
+      const likelyWebsiteAccessIssue =
+        message.includes("no new analysis was stored") ||
+        message.includes("not persisted onchain") ||
+        message.includes("Website inaccessible") ||
+        message.includes("WEBPAGE_LOAD_FAILED");
+
+      setResult(null);
+
       setStatus(
-        err?.message || "Analysis failed."
+        likelyWebsiteAccessIssue
+          ? "Analysis could not be completed. The website may be blocking GenLayer validators or may be temporarily inaccessible."
+          : message || "Analysis failed. Please try again."
       );
     } finally {
       setIsAnalyzing(false);
