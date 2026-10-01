@@ -68,12 +68,33 @@ export default class CryptoProjectScout {
       ...(fees ? { fees } : {}),
     });
 
-    return this.client.waitForTransactionReceipt({
+    const receipt = await this.client.waitForTransactionReceipt({
       hash: txHash,
       status: "ACCEPTED" as any,
       retries: 40,
       interval: 5000,
     });
+
+    const executionResult =
+      receipt?.txExecutionResultName ??
+      receipt?.tx_execution_result_name ??
+      receipt?.txExecutionResult;
+
+    const succeeded =
+      executionResult === "FINISHED_WITH_RETURN" ||
+      executionResult === 1 ||
+      executionResult === "1";
+
+    if (executionResult != null && !succeeded) {
+      throw new Error(
+        `GenLayer execution failed: ${String(executionResult)}. Transaction: ${txHash}`
+      );
+    }
+
+    return {
+      txHash,
+      receipt,
+    };
   }
 
   async getAnalysisCount(): Promise<number> {

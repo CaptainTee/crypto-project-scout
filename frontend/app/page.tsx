@@ -105,14 +105,32 @@ export default function HomePage() {
         "Submitting analysis to GenLayer validators..."
       );
 
+      const countBefore =
+        await contract.getAnalysisCount();
+
       await contract.analyzeProject(url);
 
       setStatus(
-        "Consensus accepted. Loading result..."
+        "Consensus accepted. Verifying stored result..."
       );
+
+      const countAfter =
+        await contract.getAnalysisCount();
+
+      if (countAfter <= countBefore) {
+        throw new Error(
+          "Transaction reached consensus but no new analysis was stored."
+        );
+      }
 
       const latest =
         await contract.getLatestForUrl(url);
+
+      if (!latest || latest.url !== url) {
+        throw new Error(
+          "Transaction completed but the submitted URL was not persisted onchain."
+        );
+      }
 
       setResult(latest);
 
