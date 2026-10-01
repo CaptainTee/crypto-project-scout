@@ -33,11 +33,56 @@ class CryptoProjectScout(gl.Contract):
             )
 
         def analyze():
-            page_text = gl.nondet.web.render(
-                url,
-                mode="text",
-                wait_after_loaded="2s",
-            )
+            # Prefer a rendered page because many project websites
+            # depend on JavaScript. If browser rendering is blocked,
+            # fall back to a direct HTTP GET.
+            try:
+                page_text = gl.nondet.web.render(
+                    url,
+                    mode="text",
+                    wait_after_loaded="2s",
+                )
+
+                if not page_text.strip():
+                    raise Exception(
+                        "Rendered page returned empty content"
+                    )
+
+            except Exception as render_error:
+                try:
+                    response = gl.nondet.web.get(url)
+
+                    status_code = int(response.status_code)
+
+                    if (
+                        status_code < 200
+                        or status_code >= 400
+                    ):
+                        raise Exception(
+                            "HTTP GET returned status "
+                            + str(status_code)
+                        )
+
+                    page_text = response.body.decode(
+                        "utf-8",
+                        errors="replace",
+                    )
+
+                    if not page_text.strip():
+                        raise Exception(
+                            "HTTP GET returned empty content"
+                        )
+
+                except Exception as http_error:
+                    raise Exception(
+                        "Website inaccessible to GenLayer "
+                        "validators: "
+                        + url
+                        + "; render failed: "
+                        + str(render_error)
+                        + "; HTTP fallback failed: "
+                        + str(http_error)
+                    )
 
             if len(page_text) > 12000:
                 page_text = page_text[:12000]
