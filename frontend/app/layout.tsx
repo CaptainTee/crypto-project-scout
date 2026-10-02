@@ -3,8 +3,8 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Crypto Project Scout",
-  description: "AI-powered crypto project scouting and classification using GenLayer consensus.",
+  title: "CaptainScout | Crypto Intelligence",
+  description: "Scout crypto projects with CaptainScout. AI-powered project intelligence and classification using GenLayer consensus.",
   manifest: "/site.webmanifest",
   icons: {
     icon: [
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#9B6AF6", // GenLayer brand purple
+  themeColor: "#0a121b",
 };
 
 export default function RootLayout({

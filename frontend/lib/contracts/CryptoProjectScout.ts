@@ -46,7 +46,7 @@ export default class CryptoProjectScout {
     this.client = createClient(config);
   }
 
-  async analyzeProject(url: string) {
+  async analyzeProject(url: string, onSubmitted?: () => void) {
     const feePreset = await estimateWriteFeePreset(
       this.client,
       {
@@ -67,6 +67,14 @@ export default class CryptoProjectScout {
       value: 0n,
       ...(fees ? { fees } : {}),
     });
+
+    // Progress notification only; signing, receipt checks, and fees are unchanged.
+    try {
+      onSubmitted?.();
+    } catch (error) {
+      // A UI observer must never interrupt receipt verification after submission.
+      console.error("Submission progress notification failed:", error);
+    }
 
     const receipt = await this.client.waitForTransactionReceipt({
       hash: txHash,
