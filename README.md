@@ -1,362 +1,155 @@
-# Crypto Project Scout
+# CaptainScout
 
 [![CI](https://github.com/CaptainTee/crypto-project-scout/actions/workflows/ci.yml/badge.svg)](https://github.com/CaptainTee/crypto-project-scout/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Crypto Project Scout is an AI-powered GenLayer dApp for analyzing and classifying early-stage crypto, Web3, blockchain, and crypto-enabled technology projects from their official websites.
+CaptainScout is an AI-powered crypto project intelligence dApp using **GenLayer consensus**. It analyzes project websites and X profiles, produces structured classifications, and preserves accepted analyses onchain. CaptainScout evolved from the original **Crypto Project Scout** prototype.
 
-The intelligent contract uses GenLayer web access, LLM reasoning, and validator consensus to extract structured project information and store the resulting analysis onchain.
+**Release candidate:** `captainscout-v1-rc1` — the live-tested CaptainScout v1 checkpoint covering the dashboard redesign, sequential multi-project analysis, and X-handle support. CaptainScout v1 is the application release; the deployed intelligent contract remains V3, with its existing `CryptoProjectScout` identifier and storage layout.
 
-## Live V3 Deployment
+## Analyze projects
 
-**Live app:**
-
-https://crypto-project-scout.vercel.app
-
-**Network:** GenLayer Studio / Studionet
-
-**Contract address:**
+Connect your wallet and enter one project source, or up to **5 unique sources**, one per line:
 
 ```text
-0xB93De863a654495FE6a22F0d7743D77750E61833
+https://ethereum.org/
+@flop_labs
+https://endure.network/
+@base
 ```
 
-**Deployment transaction:**
+- Website URLs must begin with `http://` or `https://`. Full X/Twitter URLs are supported.
+- Shorthand handles require `@` followed by 1–15 letters, numbers, or underscores. Bare words, internal spaces, dots, and dashes are rejected.
+- `@flop_labs` becomes `https://x.com/flop_labs` before GenLayer analysis. The queue retains the friendly handle label.
+- Input is trimmed, blank lines are ignored, and equivalent sources are deduplicated **after normalization**. Shorthand, common X/Twitter profile aliases, profile casing, trailing slashes, and recognized sharing parameters are handled. Ordinary website URLs, post URLs, and meaningful query parameters are preserved.
+- The entire batch is validated before transactions begin. The five-project limit applies after deduplication.
+- One **Analyze Project / Analyze N Projects** action starts sequential processing. Each project may require its own wallet approval. The next project starts only after the previous project completes or fails; a failure does not stop the remaining queue.
 
-https://explorer-studio.genlayer.com/tx/0x909549daa9ff23b1da79dc937adfeb0f5bc951b56ec1f93a1a568e25952acf79
+The scouting/intelligence dashboard provides batch progress, individual **Waiting**, **Awaiting wallet / submitting**, **Analyzing**, **Complete**, and **Failed** statuses, expandable results, Latest Analysis, Stored Analyses count, and Analysis History. The design supports desktop and mobile screens.
 
-V3 adds self-contained source URLs to every new history record and introduces an authorized contract upgrade mechanism for future compatible versions.
+The circled **×** control clears the input and transient input feedback without deleting onchain Analysis History. Clearing or editing input does not cancel a running queue; keep the page open while it processes.
 
-## What It Does
+When a source, including an X page, cannot be accessed by validators, the affected project receives this feedback and the queue continues:
 
-A user submits the official website URL of a project.
+> Analysis could not be completed. The website may be blocking GenLayer validators or may be temporarily inaccessible.
 
-Crypto Project Scout then:
+X support uses GenLayer's existing website-fetching mechanism. No X API integration, API keys, OAuth, or separate scraper is required.
 
-1. Validates the submitted URL.
-2. Uses GenLayer web rendering to retrieve the website content.
-3. Sends the website content to an LLM with a structured classification prompt.
-4. Uses GenLayer validator consensus to validate core classification fields.
-5. Stores the accepted analysis onchain.
-6. Stores the original source URL with the analysis.
-7. Makes historical analyses available through public read methods.
-8. Displays the stored results in the frontend.
+## Analysis output
 
-## Analysis Output
+| Field | Meaning |
+| --- | --- |
+| Project Name | Identified project name |
+| Source URL | URL submitted to GenLayer after normalization |
+| Uses Crypto | Whether the project meaningfully uses crypto |
+| Category | Project classification, such as DeFi, Infrastructure, or AI-Crypto |
+| Chain | Blockchain or network associated with the project |
+| Token Status | Live, Announced, Tokenless, or Unknown |
+| Development Stage | Mainnet, Testnet, Devnet, Pre-launch, or Unknown |
+| Use Case | Concise summary of the project's purpose |
+| Crypto Integration | How the project uses crypto or blockchain technology |
+| Confidence | Integer score from 0 to 100, displayed as a percentage |
 
-Each V3 analysis stores structured data containing:
+Results depend on available source content and may vary between analyses. Every new V3 history record includes its source URL; legacy V2 records may lack it. The result schema is unchanged by batching and X-handle support.
 
-- Project name
-- Whether the project meaningfully uses crypto
-- Category
-- Blockchain or network
-- Token status
-- Development stage
-- Use case
-- Crypto integration
-- Confidence score
-- Source URL
+## Architecture
 
-Example:
+| Component | Responsibility |
+| --- | --- |
+| Next.js frontend | React/TypeScript dashboard, input normalization, validation, sequential queue, persistence verification, and result/history display |
+| Frontend GenLayer contract client | `frontend/lib/contracts/CryptoProjectScout.ts`: submits transactions, waits for accepted receipts, checks execution outcomes, and exposes contract reads |
+| GenLayer intelligent contract | `contracts/crypto_project_scout.py`: retrieves website content, runs LLM analysis and validator consensus, and stores accepted results onchain |
+| GenLayer Studio / Studionet | Execution network and RPC used by the deployed intelligent contract and frontend |
+| Vercel | Hosts the Next.js frontend, with stable and branch-preview deployment contexts; contract execution remains on GenLayer |
 
-```json
-{
-  "project_name": "Endure Network",
-  "uses_crypto": true,
-  "category": "DeFi",
-  "chain": "Bittensor",
-  "token_status": "Announced",
-  "development_stage": "Pre-launch",
-  "use_case": "Decentralized risk intelligence for financial markets.",
-  "crypto_integration": "Uses Bittensor-based decentralized intelligence infrastructure.",
-  "confidence": 94,
-  "url": "https://endure.network/"
-}
-```
+Multi-project analysis calls the existing **`analyze_project(url)` method separately and sequentially**. There is no new batch contract method. Each successful transaction is checked for a count increase and a persisted result matching its submitted URL before the next project proceeds. Stored Analyses and Analysis History refresh after successes.
 
-Actual LLM outputs may vary between analyses because website content and validator observations can change.
+The contract uses `gl.vm.run_nondet_unsafe()` with independent leader and validator analysis, including agreement on `uses_crypto`, `category`, and `chain`. Retrieved content is treated as untrusted evidence. Public history reads include `get_analysis_count()`, `get_analysis_at(index)`, `get_latest_for_url(url)`, `get_last_result()`, and `get_last_url()`.
 
-## Supported Categories
+There is no separate application backend. Wallet implementation, contract identifiers, and onchain storage remain compatible with the prototype. The existing authorized contract upgrade mechanism requires explicit approval and storage compatibility for any future upgrade.
 
-The intelligent contract classifies projects into one of:
+## Branches and deployments
 
-- Blockchain-L1
-- Blockchain-L2
-- DeFi
-- Wallet
-- Infrastructure
-- AI-Crypto
-- Robotics-Crypto
-- Gaming
-- Other-Crypto
-- Non-Crypto
-- Unclear
+| Reference | Purpose |
+| --- | --- |
+| `main` | Stable GenLayer Portal reviewer-facing version |
+| `captainscout-redesign` | CaptainScout development branch; make development changes here |
+| `captainscout-v1-rc1` | Live-tested release-candidate **tag** |
 
-## Token Status
+**Stable reviewer app:** [Crypto Project Scout on Vercel](https://crypto-project-scout.vercel.app). This is the stable reviewer-facing deployment associated with `main`; CaptainScout development is reviewed separately through a branch preview.
 
-Possible values:
+**Existing V3 contract:** `0xB93De863a654495FE6a22F0d7743D77750E61833` on GenLayer Studio / Studionet. [Deployment transaction](https://explorer-studio.genlayer.com/tx/0x909549daa9ff23b1da79dc937adfeb0f5bc951b56ec1f93a1a568e25952acf79).
 
-- Live
-- Announced
-- Tokenless
-- Unknown
+Use a Vercel **Preview** deployment associated with `captainscout-redesign` to review CaptainScout. Obtain its current URL from the Vercel project dashboard or deployment checks for the relevant commit; preview URLs can change. Preview configuration must use the intended public contract address, RPC, and chain settings. Production settings and the stable reviewer deployment remain unchanged until an explicitly approved release.
 
-## Development Stage
+Do not develop directly on `main`. Changes to the stable version go through review and explicit release approval. A frontend preview does not require deploying or upgrading a GenLayer contract.
 
-Possible values:
+## Run locally
 
-- Mainnet
-- Testnet
-- Devnet
-- Pre-launch
-- Unknown
-
-## GenLayer Consensus
-
-The project uses `gl.vm.run_nondet_unsafe()` with separate leader and validator execution.
-
-The validator independently analyzes the same project website and checks agreement on the core classification fields:
-
-- `uses_crypto`
-- `category`
-- `chain`
-
-Only an accepted result is persisted by the contract.
-
-Website content is explicitly treated as untrusted input in the LLM prompt so instructions embedded inside analyzed websites are not treated as contract instructions.
-
-## Onchain History
-
-V3 stores analysis history using GenLayer persistent storage.
-
-Relevant public read methods include:
-
-```text
-get_last_url()
-get_last_result()
-get_analysis_count()
-get_analysis_at(index)
-get_latest_for_url(url)
-```
-
-The frontend loads this history and displays previous analyses in reverse chronological order.
-
-Every new V3 history record contains its original source URL.
-
-## Upgradability
-
-V3 registers the deploying wallet as an authorized upgrader during construction.
-
-The contract exposes:
-
-```text
-upgrade(new_code)
-```
-
-This allows future compatible contract code versions to replace the current code while preserving the existing V3 contract storage layout.
-
-Future upgrades must maintain storage compatibility.
-
-## Project Structure
-
-```text
-contracts/
-  crypto_project_scout.py        Intelligent contract
-
-tests/
-  direct/
-    test_crypto_project_scout.py Scout-specific direct tests
-    test_patterns.py             GenLayer behavior/pattern tests
-
-frontend/
-  app/
-    page.tsx                     Main Scout interface
-  lib/
-    contracts/
-      CryptoProjectScout.ts      Contract client
-    genlayer/                    Wallet, RPC, fee and client helpers
-
-deploy/
-  deployScript.ts                Contract deployment script
-
-.github/workflows/
-  ci.yml                         GitHub Actions CI
-
-gltest.config.yaml               GenLayer test configuration
-requirements.txt                 Python dependencies
-```
-
-## Requirements
-
-- Python 3.12+
-- Node.js
-- npm
-- GenLayer CLI
-- GenLayer test/lint tooling
-- MetaMask or another compatible wallet
-- Testnet GEN for write transactions
-
-Install the GenLayer CLI globally:
+Use Node.js 24 and npm for the frontend and the test commands below. An installed MetaMask wallet and testnet GEN are needed for live write transactions.
 
 ```bash
-npm install -g genlayer
+git clone --branch captainscout-redesign https://github.com/CaptainTee/crypto-project-scout.git
+cd crypto-project-scout
+npm ci
+cp frontend/.env.example frontend/.env.local
 ```
 
-## Python Setup
-
-This project can be set up with `uv`:
-
-```bash
-uv venv --python 3.12 .venv
-source .venv/bin/activate
-uv pip install -r requirements.txt
-```
-
-Verify:
-
-```bash
-python --version
-genlayer --version
-```
-
-## Contract Linting
-
-Run:
-
-```bash
-genvm-lint check contracts/crypto_project_scout.py
-```
-
-## Direct Tests
-
-Run the Scout-specific tests:
-
-```bash
-pytest tests/direct/test_crypto_project_scout.py -v
-```
-
-Run the complete direct test suite:
-
-```bash
-pytest tests/direct/ -v
-```
-
-At the current V3 checkpoint, the direct suite contains 34 passing tests: 6 Scout-specific behavior tests and 28 GenLayer pattern/regression tests.
-
-## Studionet Integration Test
-
-A full end-to-end integration test is also included:
-
-```bash
-gltest tests/integration/test_crypto_project_scout.py -v -s --network studionet
-```
-
-This test deploys a fresh temporary `CryptoProjectScout` instance to GenLayer Studionet, performs a real website/LLM/validator-consensus analysis, and verifies that the resulting V3 analysis history is persisted correctly.
-
-The integration test depends on the hosted Studionet and external validator execution, so it is intentionally kept separate from the deterministic GitHub CI suite.
-
-## Frontend Setup
-
-Move into the frontend:
-
-```bash
-cd frontend
-```
-
-Install dependencies:
-
-```bash
-npm install
-```
-
-Create your local environment configuration:
-
-```bash
-cp .env.example .env.local
-```
-
-Set:
-
-```text
-NEXT_PUBLIC_CONTRACT_ADDRESS=0xYOUR_DEPLOYED_CONTRACT_ADDRESS
-NEXT_PUBLIC_GENLAYER_RPC_URL=https://studio.genlayer.com/api
-NEXT_PUBLIC_GENLAYER_CHAIN_ID=61999
-NEXT_PUBLIC_GENLAYER_CHAIN_NAME=GenLayer Studio
-NEXT_PUBLIC_GENLAYER_SYMBOL=GEN
-```
-
-For the current V3 Studionet deployment, the contract address is:
-
-```text
-0xB93De863a654495FE6a22F0d7743D77750E61833
-```
-
-Do not commit `.env.local`.
-
-## Run the Frontend
+Configure the local template for the intended contract and network: `NEXT_PUBLIC_CONTRACT_ADDRESS`, `NEXT_PUBLIC_GENLAYER_RPC_URL`, `NEXT_PUBLIC_GENLAYER_CHAIN_ID`, `NEXT_PUBLIC_GENLAYER_CHAIN_NAME`, and `NEXT_PUBLIC_GENLAYER_SYMBOL`. These are browser-visible configuration values. Never put secrets in `NEXT_PUBLIC_*` variables or commit local environment files.
 
 ```bash
 npm run dev
 ```
 
-Then open:
+Open [localhost:3000](http://localhost:3000). See the [frontend guide](frontend/README.md) for code locations, browser QA prerequisites, and the Cloud build procedure.
 
-```text
-http://localhost:3000
+For Python contract tooling, install Python 3.12+ and `uv`, then:
+
+```bash
+uv venv --python 3.12 .venv
+source .venv/bin/activate
+uv pip install -r requirements.txt
+npm install -g genlayer
 ```
 
-## Frontend Checks
+The GenLayer CLI supports network and integration tooling; using the existing deployed contract does not require a new deployment.
 
-Type-check the frontend:
+## Testing and release baseline
+
+Recorded validation for **`captainscout-v1-rc1`**:
+
+| Check | Result |
+| --- | --- |
+| Frontend unit/regression tests | **28 passed** |
+| GenLayer direct tests | **34 passed** |
+| TypeScript / lint | Passed |
+| Production build | Passed |
+| Responsive browser QA | Passed at 1440px, 390px, and 320px |
+| Real live multi-project GenLayer batch | Validated successfully |
+| Live `@Xhandle` processing | Validated successfully |
+
+Run from the repository root, with the Python environment activated for contract checks:
 
 ```bash
 npm run lint
-```
-
-Build the production frontend:
-
-```bash
+node --test --test-isolation=none frontend/tests/*.test.mjs
+pytest tests/direct/ -q
+genvm-lint check contracts/crypto_project_scout.py
 npm run build
 ```
 
-## CI
+`npm run lint` runs TypeScript's `tsc --noEmit`. Direct tests mock external web/LLM behavior; frontend tests cover validation, normalization, deduplication, sequential processing, and failures. The [browser QA utility](frontend/tests/browser-qa.cjs) checks the actual UI with isolated wallet/contract fixtures, including clearing without losing history. Live validation is a separate release check against GenLayer and accessible sources.
 
-GitHub Actions automatically runs contract linting, the direct test suite, frontend type-checking, and a production frontend build on pushes and pull requests targeting `main`.
+Optional network-backed integration test:
 
-Repository:
+```bash
+gltest tests/integration/test_crypto_project_scout.py -v -s --network studionet
+```
 
-https://github.com/CaptainTee/crypto-project-scout
+This test **deploys a fresh temporary contract** and executes a real analysis. Run it only with deployment approval and the appropriate wallet/network setup. It is separate from the deterministic CI suite.
 
-## Security Considerations
-
-Project websites are external and untrusted.
-
-The contract prompt instructs validators to treat retrieved website content only as evidence about the analyzed project and to ignore instructions, prompts, commands, or requests embedded in that content.
-
-The submitted URL itself is stored directly by contract logic rather than being generated by the LLM.
-
-## Version History
-
-### V3
-
-- Stores the submitted project URL inside each new historical analysis
-- Displays source URLs in the frontend
-- Adds authorized contract upgradability
-- Uses a fresh GenLayer Studionet deployment
-- Current contract:
-  `0xB93De863a654495FE6a22F0d7743D77750E61833`
-
-### V2
-
-- Added persistent analysis history
-- Added lookup of latest analysis by URL
-- Added richer crypto project classification fields
-
-### V1
-
-- Initial Crypto Project Scout intelligent contract
-- Website rendering and LLM-based project classification
+Existing GitHub CI runs contract lint, direct tests, TypeScript, and a production build on pushes and pull requests targeting `main`. Frontend regression tests and browser QA are also run explicitly for release validation.
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE).
+[MIT](LICENSE).
