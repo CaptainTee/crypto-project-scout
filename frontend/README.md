@@ -4,7 +4,7 @@ The Next.js frontend for CaptainScout, an AI-powered crypto project intelligence
 
 ## Local development
 
-Work on `captainscout-redesign`; `main` remains the stable GenLayer Portal reviewer-facing version. `captainscout-v1-rc1` is the live-tested release-candidate tag.
+Work on `captainscout-redesign`; `main` remains the stable GenLayer Portal reviewer-facing version. `captainscout-v1-rc1` is the live-tested application code checkpoint for CaptainScout phases 1–3. `captainscout-v1-rc2` is the current CaptainScout v1 release candidate including documentation.
 
 Run these commands from the **repository root**, using Node.js 24 and npm:
 
@@ -44,7 +44,7 @@ node --test --test-isolation=none frontend/tests/*.test.mjs
 npm run build
 ```
 
-The RC1 baseline is 28 frontend tests passed, TypeScript/lint passed, and a production build passed. The full release baseline also includes 34 GenLayer direct tests and successful live multi-project and `@Xhandle` validation; see the [root testing section](../README.md#testing-and-release-baseline).
+The RC1 application code checkpoint baseline is 28 frontend tests passed, TypeScript/lint passed, and a production build passed. The full release baseline also includes 34 GenLayer direct tests and successful live multi-project and `@Xhandle` validation; see the [root testing section](../README.md#testing-and-release-baseline).
 
 After a production build, run browser QA in an environment with Playwright and Chromium available:
 

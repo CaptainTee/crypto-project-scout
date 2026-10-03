@@ -5,7 +5,7 @@
 
 CaptainScout is an AI-powered crypto project intelligence dApp using **GenLayer consensus**. It analyzes project websites and X profiles, produces structured classifications, and preserves accepted analyses onchain. CaptainScout evolved from the original **Crypto Project Scout** prototype.
 
-**Release candidate:** `captainscout-v1-rc1` — the live-tested CaptainScout v1 checkpoint covering the dashboard redesign, sequential multi-project analysis, and X-handle support. CaptainScout v1 is the application release; the deployed intelligent contract remains V3, with its existing `CryptoProjectScout` identifier and storage layout.
+**Current release candidate:** `captainscout-v1-rc2` — the CaptainScout v1 release candidate including documentation. `captainscout-v1-rc1` remains the live-tested application code checkpoint for phases 1–3: the dashboard redesign, sequential multi-project analysis, and X-handle support. CaptainScout v1 is the application release; the deployed intelligent contract remains V3, with its existing `CryptoProjectScout` identifier and storage layout.
 
 ## Analyze projects
 
@@ -74,7 +74,8 @@ There is no separate application backend. Wallet implementation, contract identi
 | --- | --- |
 | `main` | Stable GenLayer Portal reviewer-facing version |
 | `captainscout-redesign` | CaptainScout development branch; make development changes here |
-| `captainscout-v1-rc1` | Live-tested release-candidate **tag** |
+| `captainscout-v1-rc1` | Live-tested application code checkpoint **tag** for CaptainScout phases 1–3 |
+| `captainscout-v1-rc2` | Current CaptainScout v1 release-candidate **tag**, including documentation |
 
 **Stable reviewer app:** [Crypto Project Scout on Vercel](https://crypto-project-scout.vercel.app). This is the stable reviewer-facing deployment associated with `main`; CaptainScout development is reviewed separately through a branch preview.
 
@@ -116,7 +117,7 @@ The GenLayer CLI supports network and integration tooling; using the existing de
 
 ## Testing and release baseline
 
-Recorded validation for **`captainscout-v1-rc1`**:
+Recorded validation for the live-tested application code checkpoint **`captainscout-v1-rc1`**:
 
 | Check | Result |
 | --- | --- |
