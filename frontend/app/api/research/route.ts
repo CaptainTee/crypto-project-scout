@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { researchProvider } from "@/lib/scout/research.mjs";
+import { broaderResearchProvider } from "@/lib/scout/orchestrator.mjs";
 export const runtime = "nodejs";
 export async function POST(request: Request) {
   try {
@@ -16,9 +16,9 @@ export async function POST(request: Request) {
       if (size > 4096) { await reader.cancel(); throw Error(); }
       chunks.push(value);
     }
-    const {sourceUrl} = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    const {sourceUrl, refresh} = JSON.parse(Buffer.concat(chunks).toString("utf8"));
     if (typeof sourceUrl !== "string" || sourceUrl.length > 2048) throw Error();
-    const data = await researchProvider.enrichProject(sourceUrl);
+    const data = await broaderResearchProvider.enrichProject(sourceUrl, {refresh:refresh === true});
     return NextResponse.json({...data, sourceUrl}, {headers: {"Cache-Control": "no-store"}});
   } catch {
     return NextResponse.json({error: "Official source could not be researched safely. Please try again shortly."}, {status: 400});

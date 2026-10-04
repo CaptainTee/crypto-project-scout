@@ -5,7 +5,19 @@ export const TRUST_LABELS = {
   UNAVAILABLE: "No reliable information found",
 } as const;
 export type VerificationStatus = keyof typeof TRUST_LABELS;
+export type SourceClass = "OFFICIAL" | "PRIMARY" | "REPUTABLE_SECONDARY" | "COMMUNITY" | "UNKNOWN";
+export interface SearchResult { title: string; url: string; snippet: string; publishedAt?: string; provider: string; sourceType: string }
+export interface ExternalSearchProvider { search(query: string, options?: {maxResults?: number; timeout?: number}): Promise<SearchResult[]> }
 export interface EvidenceSource {
+  sourceClass?: SourceClass;
+  evidenceKind?: "DISCOVERY" | "FETCH_VERIFIED";
+  resultUrl?: string;
+  title?: string;
+  snippet?: string;
+  queryTypes?: ("features" | "competitors" | "funding" | "opportunities")[];
+  provider?: string;
+  firstSeenAt?: string;
+  publishedAt?: string;
   id: string;
   url: string;
   name: string;
@@ -27,11 +39,13 @@ export interface FeatureService {
 export interface SimilarProject {
   name: string;
   url: string;
+  category?: string;
   similarity: string;
   differentiators: string;
 }
 export type OriginalitySignal = "Common model" | "Differentiated implementation" | "Highly differentiated" | "Potentially novel";
 export interface Opportunity {
+  sourceClass?: SourceClass;
   title: string;
   type: "Active campaign" | "Testnet" | "Points program" | "Node opportunity" | "Waitlist" | "Ambassador/community program" | "Incentivized activity" | "Other";
   status: "Active" | "Announced" | "Ended" | "Unknown";
@@ -47,6 +61,7 @@ export interface FundingRound {
   amount: Claim<string>;
   date: Claim<string>;
   investors: Claim<string[]>;
+  leadInvestor?: Claim<string>;
 }
 export interface Funding {
   totalKnown: Claim<string>;
@@ -70,14 +85,18 @@ export interface ProjectEnrichment {
   opportunitiesStaleAfter?: string;
   originalityExplanation?: string;
   issues?: string[];
+  comparisonsStaleAfter?: string;
+  fundingStaleAfter?: string;
+  sectionAvailability?: Partial<Record<"features" | "comparisons" | "funding" | "opportunities", "AVAILABLE" | "PARTIAL" | "UNAVAILABLE">>;
+  researchAvailability?: {official: "AVAILABLE" | "PARTIAL" | "UNAVAILABLE"; broader: "BLOCKED" | "AVAILABLE" | "PARTIAL" | "NOT_CONFIGURED" | "MISSING_KEY" | "UNSUPPORTED" | "UNAVAILABLE"};
 }
 export interface EnrichmentProvider {
-  enrichProject(sourceUrl: string, currentAnalysis: Readonly<ScoutResult>): Promise<unknown>;
+  enrichProject(sourceUrl: string, currentAnalysis: Readonly<ScoutResult>, options?: {refresh?: boolean}): Promise<unknown>;
 }
 // Called only by the explicit research action; onchain records remain detached.
 export const enrichmentProvider: EnrichmentProvider = {
-  async enrichProject(sourceUrl) {
-    const response = await fetch("/api/research", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({sourceUrl})});
+  async enrichProject(sourceUrl, _analysis, options) {
+    const response = await fetch("/api/research", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({sourceUrl, refresh:options?.refresh === true})});
     if (!response.ok) throw new Error("Official source could not be researched safely");
     return response.json();
   },
@@ -94,21 +113,31 @@ const oneOf = (value: unknown, options: readonly string[]) => typeof value === "
 /** Reject malformed provider payloads at the boundary, including unsupported verified claims. */
 export function parseEnrichment(input: unknown, sourceUrl: string): ProjectEnrichment | null {
   if (!object(input) || input.schemaVersion !== 1 || input.sourceUrl !== sourceUrl || !safeSourceUrl(input.sourceUrl) || !timestamp(input.lastUpdated) || !Array.isArray(input.evidence)) return null;
-  for (const key of ["researchedAt", "sourceCheckedAt", "staleAfter", "opportunitiesStaleAfter"]) if (input[key] !== undefined && !timestamp(input[key])) return null;
+  for (const key of ["researchedAt", "sourceCheckedAt", "staleAfter", "opportunitiesStaleAfter", "comparisonsStaleAfter", "fundingStaleAfter"]) if (input[key] !== undefined && !timestamp(input[key])) return null;
   if (input.issues !== undefined && (!Array.isArray(input.issues) || !input.issues.every(text))) return null;
   if (input.originalityExplanation !== undefined && !text(input.originalityExplanation)) return null;
+  if (input.researchAvailability !== undefined && (!object(input.researchAvailability) || !oneOf(input.researchAvailability.official, ["AVAILABLE", "PARTIAL", "UNAVAILABLE"]) || !oneOf(input.researchAvailability.broader, ["BLOCKED", "AVAILABLE", "PARTIAL", "NOT_CONFIGURED", "MISSING_KEY", "UNSUPPORTED", "UNAVAILABLE"]))) return null;
+  if (input.sectionAvailability !== undefined && (!object(input.sectionAvailability) || Object.entries(input.sectionAvailability).some(([key,value]) => !["features","comparisons","funding","opportunities"].includes(key) || !oneOf(value,["AVAILABLE","PARTIAL","UNAVAILABLE"])))) return null;
   const evidence = input.evidence;
+  if (!evidence.every(e => object(e)
+    && (e.evidenceKind === undefined || oneOf(e.evidenceKind,["DISCOVERY","FETCH_VERIFIED"]))
+    && (e.evidenceKind !== "DISCOVERY" || e.verification === "UNVERIFIED")
+    && (e.resultUrl === undefined || safeSourceUrl(e.resultUrl))
+    && (e.title === undefined || text(e.title))
+    && (e.snippet === undefined || typeof e.snippet === "string")
+    && (e.queryTypes === undefined || Array.isArray(e.queryTypes) && e.queryTypes.every(t => oneOf(t,["features","competitors","funding","opportunities"]))))) return null;
+  if (!evidence.every(e => object(e) && (e.sourceClass === undefined || oneOf(e.sourceClass, ["OFFICIAL", "PRIMARY", "REPUTABLE_SECONDARY", "COMMUNITY", "UNKNOWN"])) && (e.provider === undefined || text(e.provider)) && (e.firstSeenAt === undefined || timestamp(e.firstSeenAt)) && (e.publishedAt === undefined || timestamp(e.publishedAt)))) return null;
   if (!evidence.every(e => object(e) && text(e.id) && safeSourceUrl(e.url) && text(e.name) && timestamp(e.checkedAt) && oneOf(e.verification, ["VERIFIED", "INFERRED", "UNVERIFIED"])) || new Set(evidence.map(e => e.id)).size !== evidence.length) return null;
   const claim = (c: unknown, validate: (v: unknown) => boolean): boolean => {
     if (!object(c) || !oneOf(c.verification, Object.keys(TRUST_LABELS)) || !Array.isArray(c.evidenceIds) || !c.evidenceIds.every(id => text(id) && evidence.some(e => e.id === id))) return false;
     if (c.verification === "UNAVAILABLE") return c.value === null && c.evidenceIds.length === 0;
-    return validate(c.value) && c.evidenceIds.length > 0 && (c.verification !== "VERIFIED" || c.evidenceIds.some(id => evidence.some(e => e.id === id && e.verification === "VERIFIED")));
+    return validate(c.value) && c.evidenceIds.some(id => evidence.some(e => e.id === id && e.evidenceKind !== "DISCOVERY")) && (c.verification !== "VERIFIED" || c.evidenceIds.some(id => evidence.some(e => e.id === id && e.verification === "VERIFIED" && e.evidenceKind !== "DISCOVERY")));
   };
   const claims = (items: unknown, validate: (v: unknown) => boolean) => Array.isArray(items) && items.every(c => claim(c, validate));
   const feature = (v: unknown) => object(v) && text(v.title) && text(v.description) && oneOf(v.availability, ["Offered", "Announced"]) && claim(v.targetUsers, text);
-  const similar = (v: unknown) => object(v) && text(v.name) && safeSourceUrl(v.url) && text(v.similarity) && text(v.differentiators);
-  const opportunity = (v: unknown) => object(v) && text(v.title) && oneOf(v.type, ["Active campaign", "Testnet", "Points program", "Node opportunity", "Waitlist", "Ambassador/community program", "Incentivized activity", "Other"]) && oneOf(v.status, ["Active", "Announced", "Ended", "Unknown"]) && text(v.description) && safeSourceUrl(v.participationUrl) && safeSourceUrl(v.sourceUrl) && timestamp(v.lastChecked) && (v.deadline === undefined || timestamp(v.deadline));
-  const round = (v: unknown) => object(v) && text(v.round) && (v.announcementUrl === undefined || safeSourceUrl(v.announcementUrl)) && claim(v.amount, text) && claim(v.date, text) && claim(v.investors, names => Array.isArray(names) && names.length > 0 && names.every(text));
+  const similar = (v: unknown) => object(v) && text(v.name) && safeSourceUrl(v.url) && (v.category === undefined || text(v.category)) && text(v.similarity) && text(v.differentiators);
+  const opportunity = (v: unknown) => object(v) && (v.sourceClass === undefined || oneOf(v.sourceClass, ["OFFICIAL", "PRIMARY", "REPUTABLE_SECONDARY", "COMMUNITY", "UNKNOWN"])) && text(v.title) && oneOf(v.type, ["Active campaign", "Testnet", "Points program", "Node opportunity", "Waitlist", "Ambassador/community program", "Incentivized activity", "Other"]) && oneOf(v.status, ["Active", "Announced", "Ended", "Unknown"]) && text(v.description) && safeSourceUrl(v.participationUrl) && safeSourceUrl(v.sourceUrl) && timestamp(v.lastChecked) && (v.deadline === undefined || timestamp(v.deadline));
+  const round = (v: unknown) => object(v) && text(v.round) && (v.announcementUrl === undefined || safeSourceUrl(v.announcementUrl)) && claim(v.amount, text) && claim(v.date, text) && (v.leadInvestor === undefined || claim(v.leadInvestor, text)) && claim(v.investors, names => Array.isArray(names) && names.length > 0 && names.every(text));
   if (!claims(input.featuresAndServices, feature) || !claims(input.similarProjects, similar) || !claim(input.originalitySignal, v => oneOf(v, ["Common model", "Differentiated implementation", "Highly differentiated", "Potentially novel"])) || !claims(input.opportunities, opportunity) || !object(input.funding) || !claim(input.funding.totalKnown, text) || !claims(input.funding.rounds, round)) return null;
   return structuredClone(input) as unknown as ProjectEnrichment;
 }
@@ -118,13 +147,13 @@ export function enrichmentState(data: ProjectEnrichment | null): EnrichmentState
   const groups = [data.featuresAndServices, data.similarProjects, [data.originalitySignal], data.opportunities, [data.funding.totalKnown, ...data.funding.rounds]];
   const all: Claim<unknown>[] = groups.flat();
   const usable = all.some(c => c.verification === "VERIFIED" || c.verification === "INFERRED");
-  const complete = groups.every(g => g.length && g.every(c => c.verification === "VERIFIED" || c.verification === "INFERRED")) && data.featuresAndServices.every(c => c.value?.targetUsers.verification !== "UNAVAILABLE" && c.value?.targetUsers.verification !== "UNVERIFIED") && data.funding.rounds.every(c => c.value && [c.value.amount, c.value.date, c.value.investors].every(v => v.verification === "VERIFIED" || v.verification === "INFERRED"));
+  const complete = (!data.researchAvailability || (data.researchAvailability.official === "AVAILABLE" && data.researchAvailability.broader === "AVAILABLE")) && groups.every(g => g.length && g.every(c => c.verification === "VERIFIED" || c.verification === "INFERRED")) && data.featuresAndServices.every(c => c.value?.targetUsers.verification !== "UNAVAILABLE" && c.value?.targetUsers.verification !== "UNVERIFIED") && data.funding.rounds.every(c => c.value && [c.value.amount, c.value.date, c.value.investors].every(v => v.verification === "VERIFIED" || v.verification === "INFERRED"));
   return {status: !usable ? "Unable to verify" : complete ? "Available" : "Partial", data};
 }
-export async function loadEnrichment(provider: EnrichmentProvider, analysis: Readonly<ScoutResult>): Promise<EnrichmentState> {
+export async function loadEnrichment(provider: EnrichmentProvider, analysis: Readonly<ScoutResult>, options?: {refresh?: boolean}): Promise<EnrichmentState> {
   if (!analysis.url) return enrichmentState(null);
   try {
-    const payload = await provider.enrichProject(analysis.url, structuredClone(analysis));
+    const payload = await provider.enrichProject(analysis.url, structuredClone(analysis), options);
     if (payload == null) return enrichmentState(null);
     const data = parseEnrichment(payload, analysis.url);
     return data ? enrichmentState(data) : {status: "Unable to verify", data: null};

@@ -96,3 +96,57 @@ test('opportunity display downgrades stale active evidence and expires deadlines
  assert.equal(opportunityAtTime(c,d.opportunitiesStaleAfter,Date.parse('2027-01-01')).value.status,'Ended');assert.equal(c.value.status,'Active');
 });
 test('malformed deadline stays unknown and ended campaigns never use the Active campaign type',async()=>{const malformed=await run('<p>Testnet registration is open until 2026-99-99</p>');assert.equal(malformed.opportunities[0].value.status,'Unknown');const closed=await run('<p>Campaign registration is closed until 2025-12-01</p>');assert.equal(closed.opportunities[0].value.status,'Ended');assert.notEqual(closed.opportunities[0].value.type,'Active campaign');});
+
+test('public 2001 IPv6 accepted while reserved and transition ranges remain rejected',async()=>{
+ for(const address of ['2001:4860:4860::8888','2001:41d0::1']) {
+  assert.equal(publicAddress(address),true);
+  assert.ok(await fetchOfficial(source,{resolve:async()=>[{address,family:6}],transport:mockTransport([{}])}));
+ }
+ for(const address of ['2001::1','2001:0000:1234::1','2001:db8::1','2001:10::1','2001:20::1','2002:abcd::1'])assert.equal(publicAddress(address),false);
+});
+test('literal public IPv6 DNS lookup receives hostname without URL brackets',async()=>{
+ const url='https://[2606:4700:4700::1111]/';
+ const p=await fetchOfficial(url,{resolve:async host=>{assert.equal(host,'2606:4700:4700::1111');return [{address:host,family:6}];},transport:mockTransport([{}])});assert.equal(p.url,url);
+});
+test('sanitized fetch categories distinguish safety, timeout, content, size, DNS and TLS',async()=>{
+ const {fetchDiagnostic}=await import('../lib/scout/research.mjs');
+ for(const [message,code,category] of [['Unsafe source URL',undefined,'UNSAFE_URL'],['Unsafe source address',undefined,'NON_PUBLIC_DNS'],['Research timed out',undefined,'TIMEOUT'],['Official source exceeded research size limit',undefined,'SIZE_LIMIT'],['No usable official source content',undefined,'CONTENT_TYPE'],['secret hostname','EAI_AGAIN','DNS_FAILURE'],['secret TLS certificate','CERT_HAS_EXPIRED','TLS_FAILURE']]) assert.equal(fetchDiagnostic(Object.assign(Error(message),{code})),category);
+});
+test('navigation and audience labels cannot become capabilities; ecosystem services remain',async()=>{
+ const d=await run('<nav><p>Build on the protocol and explore services for developers.</p></nav><h2>For developers</h2><h2>Ecosystem Support Program</h2><p>Project offers developer grants and technical support for ecosystem developers.</p><p>Project enables staking participation for validators.</p>');
+ assert.equal(d.featuresAndServices.length,2);assert.ok(d.featuresAndServices.every(c=>c.evidenceIds.length));assert.ok(d.featuresAndServices.some(c=>/developer grants/.test(c.value.description)));
+});
+test('duplicate node/testnet opportunities normalize titles, URLs and source relationships; distinct programs remain',async()=>{
+ const {dedupeOpportunities}=await import('../lib/scout/research.mjs');
+ const base=(await run('<p>Project invites users to run nodes for the protocol.</p><a href="/nodes">Nodes</a>')).opportunities[0];
+ const one=structuredClone(base);const two=structuredClone(base);two.value.title='Node';two.value.participationUrl=source+'nodes?utm_source=test#join';two.value.sourceUrl=source+'docs';two.evidenceIds=['second'];
+ const other=structuredClone(base);other.value.participationUrl=source+'validator-program';other.value.title='Validator program';
+ const merged=dedupeOpportunities([one,two,other]);assert.equal(merged.length,2);assert.deepEqual(merged[0].evidenceIds,[...base.evidenceIds,'second']);assert.equal(merged[0].value.status,'Unknown');
+ const testnet=structuredClone(base);testnet.value.type='Testnet';testnet.value.title='Testnets';testnet.value.participationUrl=source+'testnet';const same=structuredClone(testnet);same.value.title='testnet';assert.equal(dedupeOpportunities([testnet,same]).length,1);
+});
+test('meaningful article and program query parameters survive; tracking does not',()=>{
+ assert.equal(normalizedUrl('https://public.example/article?id=123&utm_source=search#top'),'https://public.example/article?id=123');
+ assert.notEqual(normalizedUrl('https://public.example/join?program=nodes'),normalizedUrl('https://public.example/join?program=validators'));
+});
+test('capability extraction validates the extracted clause rather than an entire mixed heading block',async()=>{
+ const d=await run('<li>For developers. Build tools and explore the protocol.</li><li>Where to get help and support from developers.</li><li>Ecosystem Support Program. The protocol supports community grants.</li><p>Project enables staking participation for validators.</p><p>Project offers grants and technical support services for developers.</p>');
+ assert.equal(d.featuresAndServices.length,2);assert.ok(d.featuresAndServices.every(c=>!/^Reported capability: (For developers|Ecosystem Support Program|Where to)/.test(c.value.description)));
+});
+test('generic node explanations do not become participation programs while running nodes remains Unknown',async()=>{
+ const d=await run('<p>The network consists of independent computers called nodes.</p><p>Nodes support consensus for the protocol.</p><p>Project invites users to run a node.</p><a href="/run-a-node">Run a node</a>');
+ assert.equal(d.opportunities.length,1);assert.equal(d.opportunities[0].value.participationUrl,source+'run-a-node');assert.equal(d.opportunities[0].value.status,'Unknown');
+});
+
+test('safe external fetch retains a body completed just below its absolute timeout', async () => {
+ const transport={get(url,options,callback){const request=new EventEmitter();request.destroy=err=>{request.emit('error',err);request.emit('close');};
+  const res=new PassThrough();res.statusCode=200;res.headers={'content-type':'text/html'};
+  setTimeout(()=>{callback(res);res.end('<p>Project offers storage for developers.</p>');request.emit('close');},15);
+  return request;
+ }};
+ const page=await fetchOfficial(source,{resolve,transport,timeout:40});assert.match(page.html,/storage/);
+});
+test('external timeout includes slow DNS and aborts before opening a transport',async()=>{
+ let connected=false;
+ await assert.rejects(fetchOfficial(source,{timeout:10,resolve:()=>new Promise(r=>setTimeout(()=>r([{address:'93.184.216.34',family:4}]),30)),transport:{get(){connected=true;}}}),/Research timed out/);
+ assert.equal(connected,false);
+});

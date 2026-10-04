@@ -67,3 +67,17 @@ test('unverified-only research is unable to verify and unavailable guesses are r
   d.originalitySignal={...missing,value:'Common model'};
   assert.equal(parseEnrichment(d,analysis.url),null);
 });
+
+test('discovery metadata is accepted only as Unverified and cannot support Verified funding',()=>{
+ const d=copy();d.evidence[0].evidenceKind='DISCOVERY';d.evidence[0].verification='UNVERIFIED';d.evidence[0].provider='tavily';d.evidence[0].queryTypes=['funding'];d.evidence[0].snippet='Discovery only';
+ d.evidence[1].verification='UNVERIFIED';assert.equal(parseEnrichment(d,analysis.url),null);
+ d.evidence[0].verification='VERIFIED';assert.equal(parseEnrichment(d,analysis.url),null);
+});
+test('discovery-only citations cannot support even Inferred or Unverified funding claims',()=>{
+ for(const verification of ['INFERRED','UNVERIFIED']) {
+  const d=copy();d.evidence.forEach(e=>{e.evidenceKind='DISCOVERY';e.verification='UNVERIFIED';});
+  const downgrade=value=>{if(!value || typeof value!=='object')return;if(value.verification&&value.verification!=='UNAVAILABLE')value.verification=verification;Object.values(value).forEach(downgrade);};
+  downgrade(d.featuresAndServices);downgrade(d.similarProjects);downgrade(d.opportunities);downgrade(d.originalitySignal);downgrade(d.funding);
+  assert.equal(parseEnrichment(d,analysis.url),null);
+ }
+});

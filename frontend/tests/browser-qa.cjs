@@ -41,7 +41,7 @@ async function buildFixture() {
         }
       }`,
     'enrichment.js': `export * from ${JSON.stringify(path.join(root, 'frontend/lib/scout/enrichment.ts'))};
-      export const enrichmentProvider={async enrichProject(url){window.__researchCalls=(window.__researchCalls||0)+1;if(window.__researchFailure)throw Error('blocked');return window.__enrichmentMock && url==='https://stored.example/' ? ${JSON.stringify(require('./fixtures/enrichment.json'))} : null;}};`,
+      export const enrichmentProvider={async enrichProject(url,_analysis,options){window.__lastRefresh=options?.refresh;window.__researchCalls=(window.__researchCalls||0)+1;if(window.__researchFailure)throw Error('blocked');if(window.__officialOnly)return {...${JSON.stringify(require('./fixtures/enrichment.json'))},similarProjects:[],researchAvailability:{official:'AVAILABLE',broader:'NOT_CONFIGURED'}};return window.__enrichmentMock && url==='https://stored.example/' ? {...${JSON.stringify(require('./fixtures/enrichment.json'))},researchAvailability:{official:window.__partialOfficial?'PARTIAL':'AVAILABLE',broader:window.__providerFailed?'UNAVAILABLE':'AVAILABLE'},evidence:${JSON.stringify(require('./fixtures/enrichment.json'))}.evidence.map((e,i)=>({...e,sourceClass:i?'PRIMARY':'OFFICIAL',provider:i?'mock-search':'official',evidenceKind:'FETCH_VERIFIED'})).concat([{id:'discovery',url:'https://discovery.example/report',name:'Discovery report',domain:'discovery.example',provider:'tavily',sourceClass:'UNKNOWN',checkedAt:'2026-10-04T12:00:00Z',verification:'UNVERIFIED',evidenceKind:'DISCOVERY',queryTypes:['funding'],snippet:'Discovery only'}])} : null;}};`,
     'entry.tsx': `import React from 'react';import {createRoot} from 'react-dom/client';
       import HomePage from ${JSON.stringify(path.join(root, 'frontend/app/page'))};
       createRoot(document.getElementById('root')).render(<HomePage/>);`,
@@ -117,13 +117,35 @@ async function checkWidth(browser, width, css, bundle) {
   assert.match(await enriched.innerText(), /Inferred/);
   assert.equal(await enriched.getByRole('link', {name:'Participation details'}).getAttribute('href'), 'https://research.example/join');
   assert.match(await enriched.innerText(), /Mock investor/);
+  assert.match(await enriched.innerText(), /Broader research: available/);
+  assert.match(await enriched.innerText(), /PRIMARY/);
+  assert.match(await enriched.innerText(), /Discovery only \(page not verified\)/);
+  assert.match(await enriched.innerText(), /tavily/);
+  assert.doesNotMatch(await enriched.innerText(), /providerStatus|rejectedBeforeFetch|NON_PUBLIC_DNS/);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await enriched.screenshot({path:path.join(output, `enrichment-${width}.png`)});
-  await page.evaluate(() => {window.__researchFailure=true;});
-  await enriched.getByRole('button', {name:'Research Project'}).click();
+  await page.evaluate(() => {window.__partialOfficial=true;});
+  await enriched.getByRole('button', {name:'Refresh Research'}).click();
+  await page.waitForFunction(() => document.querySelector('.history-list .enriched-intelligence')?.textContent.includes('Official research: partial'));
+  assert.equal(await page.evaluate(() => window.__lastRefresh), true);
+  assert.match(await enriched.innerText(), /Broader research: available/);
+  await page.evaluate(() => {window.__providerFailed=true;});
+  await enriched.getByRole('button', {name:'Refresh Research'}).click();
+  await page.waitForFunction(() => document.querySelector('.history-list .enriched-intelligence')?.textContent.includes('Broader research: unable to verify'));
+  assert.match(await enriched.innerText(), /Mock investor/);
+  assert.match(await enriched.innerText(), /Enriched intelligence: Partial/);
+  await page.evaluate(() => {window.__partialOfficial=false;window.__providerFailed=false;window.__researchFailure=true;});
+  await enriched.getByRole('button', {name:'Refresh Research'}).click();
   await page.waitForFunction(() => document.querySelector('.history-list .intelligence-status')?.textContent.includes('Unable to verify'));
   assert.match(await enriched.innerText(), /Onchain analysis: Complete/);
-  await page.evaluate(() => {window.__researchFailure=false;});
+  await page.evaluate(() => {window.__researchFailure=false;window.__officialOnly=true;});
+  await enriched.getByRole('button', {name:'Research Project'}).click();
+  await page.waitForFunction(() => document.querySelector('.history-list .enriched-intelligence')?.textContent.includes('Broader research provider is not configured'));
+  assert.match(await enriched.innerText(), /Official research: available/);
+  assert.match(await enriched.innerText(), /Enriched intelligence: Partial/);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await enriched.screenshot({path:path.join(output, `official-only-${width}.png`)});
+  await page.evaluate(() => {window.__officialOnly=false;});
   await page.getByRole('button', {name:'Close History'}).click();
   await page.evaluate(() => { window.__enrichmentMock = false; });
 

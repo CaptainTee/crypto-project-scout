@@ -260,7 +260,7 @@ partial/unavailable intelligence without affecting the existing onchain result.
 Fetch protections reject credentials, non-HTTP schemes, nonstandard ports,
 localhost/private/link-local IPs, local domains and unsafe DNS answers. Each
 redirect is revalidated; requests pin the validated DNS address while preserving
-TLS hostname checks. Limits: six pages, 256 KB per response, three redirects,
+TLS hostname checks. Limits: six pages, 512 KiB per response, three redirects,
 four-second request/DNS deadlines and a 24-second research budget. Only HTML/plain
 text is accepted; scripts/styles are stripped. API bodies are limited to 4 KB,
 with same-origin browser requests and three concurrent jobs per runtime.
@@ -270,7 +270,7 @@ concurrent requests for the same normalized identity. It is **not persistence**:
 Vercel cold starts, runtime recycling and separate instances lose/share no cache.
 Website identities normalize protocol/www/tracking aliases, retain meaningful
 paths (to avoid conflating shared-host projects), and normalize X/Twitter handles.
-Phase 5B-2 needs a durable database keyed by project identity with append-only
+Future durable research needs a repository keyed by project identity with append-only
 funding/evidence history, shared job/rate limits and scheduled refresh. Broader
 research also needs vetted search/index providers, better entity resolution and
 content extraction/rendering; protected social sources may require authorized
@@ -286,3 +286,222 @@ current execution environment (sandbox DNS also failed); live source reliability
 has not been demonstrated here. The final production build uses Next's webpack
 CLI option because Turbopack's CSS worker hit a local-port permission error, even
 after escalation. No build script or deployment setting was changed.
+
+### Phase 5B-2: broader web intelligence
+
+Research remains an explicit **Research Project / Refresh Research** action. The
+Node-only API uses `OfficialResearchProvider`, a normalized `ExternalSearchProvider`
+(`search(query, options)`), `FundingResearchProvider`, and `ResearchOrchestrator`.
+The UI consumes the existing validated sidecar, never vendor response objects.
+`search.mjs` contains the Tavily adapter; `orchestrator.mjs` owns discovery, trust,
+claim merging and failure isolation. Neither module is imported by client code.
+No contract, V3 history/storage, wallet, deployment, or dependency changes are made.
+
+To activate broader research, set these **server-only** variables in the local
+Next environment (or, when separately authorized, the hosting environment):
+
+```text
+CAPTAINSCOUT_SEARCH_PROVIDER=tavily
+CAPTAINSCOUT_SEARCH_API_KEY=<your actual Tavily API key>
+```
+
+Restart the Next server after setting them. Do not use `NEXT_PUBLIC_` prefixes.
+Do not commit the local environment file. The adapter posts to the fixed Tavily
+search endpoint using basic search, explicitly disables automatic parameters,
+answers, images and raw content, and returns only normalized URL/title/snippet,
+optional publication date, provider and source type. See the
+[Tavily search reference](https://docs.tavily.com/documentation/api-reference/endpoint/search).
+Missing provider/key or unsupported configuration makes **no provider request**;
+official research continues and the UI states broader research is not configured.
+Upstream errors are sanitized; API keys, billing and vendor error bodies are never
+returned. Search snippets are discovery hints only, never verified claims.
+
+Research limits per project: six queries, three inspected results per query,
+eight external pages (one features, two comparisons, two funding, and one for
+each opportunity query), 512 KiB per search response/page, ten-second search timeout,
+four-second page timeout, three redirects, and a 45-second combined budget.
+Official research retains its six-page/24-second limits and DNS-pinned transport.
+Queries cover features/services, comparisons, funding/investors, testnets/points/
+quests, nodes/validators/ambassadors/hackathons and waitlists/early access.
+Paid discovery requires a usable identity from the official page title; blocked
+X-only sources do not trigger guessed searches. No automatic or background paid
+research occurs. Refresh reuses fresh caches rather than forcing paid calls.
+
+Search-result pages use the same SSRF-safe HTML/plain-text fetcher as official
+pages: public DNS answers only, pinned connections, preserved TLS hostname checks,
+redirect revalidation, safe schemes/ports, no credentials, bounded bodies and no
+script execution or headless rendering. External paragraphs must explicitly name
+the resolved project to supply claims. This conservative English heuristic can
+miss valid sources, renamed entities, unusual wording and JavaScript/PDF content.
+
+Evidence preserves provider, source class, trust, checked time and first seen
+where available. Classes rank OFFICIAL > PRIMARY > REPUTABLE_SECONDARY > COMMUNITY
+> UNKNOWN. Exact known official hosts, a conservative investor/announcement domain
+list and a conservative publication/database list determine classification;
+unknown publishers are not automatically trusted. Domain ranking is a heuristic,
+not editorial fact checking. Every extracted claim refers to fetched evidence.
+Duplicate URLs and normalized identical claims merge citations. External unknown/
+community capabilities remain Unverified; these sources cannot establish funding
+or comparable projects. Official statements keep the Phase 5B-1 semantics.
+
+Features include offered/announced capabilities and explicit target users.
+Comparisons require an explicit linked comparison and a concrete product category
+such as storage/lending/payments/rollups rather than broad AI/blockchain/DeFi labels.
+At most five comparisons appear; specific stated implementation differences are
+shown when present, otherwise the difference is explicitly unconfirmed. Originality
+is Common model or Differentiated implementation only when supported by comparisons
+and stated differences; otherwise Insufficient evidence. Highly differentiated and
+Potentially novel remain schema options, never invented by this heuristic.
+
+Funding requires explicit raised/secured/closed wording, an amount and named round.
+Explicit dates/investors and an explicitly named lead investor are retained; duplicate round/date/amount reports merge
+citations and investor names. Conflicting amounts retain both Unverified reports.
+Only explicit disclosed totals are accepted; contradictory totals remain Unverified
+with both amounts and citations. No total is guessed from partial rounds, logos,
+token metrics, TVL or valuations.
+Verified historical funding is retained during refresh in a bounded per-process
+snapshot with its original evidence; its announcement age never expires the round.
+External Active opportunities require a trusted fetched statement, explicit open
+registration, a future dated deadline, and publication within seven days. Upcoming
+language maps to Announced, closed/expired campaigns to Ended, and stale/undated
+claims to Unknown. Participation URLs, source class, checked time and citations
+are retained. The UI downgrades stale Active items after one hour without modifying
+stored sidecars.
+
+Caches are behind `RuntimeRepository`: at most 100 detached entries per repository,
+one-hour whole-result cache with in-flight identity coalescing and at most three
+concurrent jobs. Search query caches use 24 hours for features, seven days for
+comparisons, 30 days for funding, and one hour for opportunities. Historical funding
+snapshots are capped at 100 projects, with no age expiry. All caches are ephemeral
+and instance-local; cold starts/eviction lose state and separate instances may
+repeat searches. Future durable persistence needs identity-keyed evidence/claim
+records, funding conflict history, per-type freshness, shared coalescing/rate limits
+and source provenance. No database or scheduled service is added. This same identity
+→ evidence → enrichment pipeline can later accept Radar/feed discoveries; FrontRun
+monitoring, authorized X access, and Radar ingestion are not implemented here.
+
+Initial Phase 5B-2 validation (historical; superseded by repair results below): TypeScript passes; all six JavaScript
+suite files pass (137 individual tests with non-isolated reporting, including 47
+new provider/orchestration cases); all 34 direct Python tests pass. Production
+webpack build passes using the authorized CLI fallback after the known Turbopack
+port-binding restriction. Mocked browser QA passes at 1440/768/390/320 px for both
+populated broader research and official-only/disabled-provider states, with no
+overflow or runtime errors and no live wallet transactions. No provider or API key
+is configured locally, so paid/live broader research was not attempted. A bounded
+live official-source check retrieved one IPFS source and six capabilities; a
+linked-page timeout was isolated. Provider semantics are validated with mocked
+HTTP responses; a minimal live adapter check remains necessary after supplying a
+real server-side key. Extraction is conservative and does not promise exhaustive
+competitor, funding, or opportunity coverage.
+
+Phase 5B-2 identity gate repair: broader queries require an identity derived from
+usable HTML at the submitted official root, fetched with public DNS validation,
+pinned SSRF-safe transport, and validated redirects. Child failures retain that
+identity and successful evidence and make official research Partial. Root failure
+blocks broader research; historical analysis text alone never unlocks search.
+The root has a 12-second allowance, child pages 4 seconds, and the official stage
+keeps its 24-second total budget. DNS and redirects share each fetch deadline.
+Explicit Refresh retries official research even after a cached root failure;
+fresh category search caches and concurrent-request coalescing still avoid
+unnecessary provider calls. Provider failure retains official evidence.
+
+Phase 5B-2 external-evidence repair: Tavily authentication has been confirmed
+separately; this repair never changes credentials. Successful search results now
+retain safe discovery metadata (provider, title, summary, result URL, query groups,
+class, domain and checked time) even when fetch or extraction yields no claims.
+`DISCOVERY` evidence is always Unverified and cannot support any extracted claim.
+`FETCH_VERIFIED` describes a fetched page; its source rank and entity context still
+determine claim trust. Funding continues to require reliable fetched statements.
+Meaningful URL query parameters survive normalization; tracking is removed.
+
+The former external catch collapsed DNS, HTTP, timeout, TLS, content and size
+failures into one misleading safety message and discarded every failed source.
+An optional server-only `onDiagnostics` callback now reports bounded per-query
+counts and fixed categories, without upstream bodies, raw errors, or credentials.
+Diagnostics never enter the API response. Search groups run concurrently within
+the unchanged 45-second combined budget, so earlier page fetches cannot prevent
+later search invocation. Per-section availability separates empty successful
+searches from provider failure, partial fetches, and budget skips. Empty funding
+is displayed as “No reliable funding information found.”
+
+IPv6 checks now accept public `2001:` addresses while still rejecting transition,
+documentation, local and reserved ranges; all DNS answers remain validated before
+pinning, and redirects are revalidated. Public IPv6 literals are resolved without
+URL brackets. External source classes are determined by the source domain, not
+by Tavily metadata or arbitrary links found on the official site.
+
+Feature extraction checks the final extracted clause, excludes navigation and
+audience headings, and retains actual grant/support services. Generic node network
+explanations no longer establish participation programs. Opportunities merge using
+normalized type/title, participation URL and source/evidence relationships; distinct
+program URLs stay separate. Source status stays bound to its own statement.
+The existing sidecar uses Active / Announced / Ended / Unknown (corresponding to
+ACTIVE / UPCOMING / ENDED / UNKNOWN); it adds no persisted contract fields.
+
+One fresh Ethereum broader validation was performed, with empty runtime caches:
+all six Tavily requests hit the unchanged five-second timeout; no HTTP response,
+normalized result, or external fetch was obtained. Six official sources survived,
+with official AVAILABLE, broader UNAVAILABLE, and final enrichment Partial.
+The recorded snapshot had zero comparables/funding, and opportunities 8 → 7.
+It exposed additional mixed-heading and generic-node extraction cases, subsequently
+fixed and covered by mocks; the snapshot therefore precedes those final extraction
+refinements. No second Tavily run was made. The earlier generic external failure
+cannot be retrospectively attributed to DNS, IPv6, HTTP, size or timeout without
+its original diagnostics. Successful external flow is demonstrated by regression
+fixtures, not by this timeout-limited live attempt.
+
+Final repair verification: TypeScript passes; all six JavaScript test files pass
+(179 individual cases); 34 direct Python tests pass; `git diff --check` passes.
+Turbopack hits the known local port-binding restriction; the authorized webpack
+production build passes without configuration changes. Mocked responsive QA passes
+at 1440 / 768 / 390 / 320 px, including discovery-only labels and absence of raw
+diagnostics, with no overflow, browser errors, live requests or wallet transactions.
+
+Phase 5B-2 Tavily timing validation (2026-10-04): three sequential minimal direct
+searches returned HTTP 200 and one result in 2,394 / 5,528 / 2,046 ms. The external
+provider deadline is now 10,000 ms (previously 5,000 ms); the six searches remain
+concurrent within the unchanged 45,000 ms combined budget, which starts before
+bounded official research. Query/result/page/byte limits, caching, explicit
+Research/Refresh actions and evidence trust rules are unchanged.
+
+One fresh Ethereum validation returned six successful Tavily queries, zero
+provider timeouts or other failures, and 18 normalized results. Successful search
+latencies were min/median/max 4,894 / 5,169 / 5,433 ms. Eighteen URLs were accepted,
+zero safety-rejected, eight page fetches timed out and ten were skipped by the
+existing page limits. No external page was fetched successfully. Official research
+was AVAILABLE (six evidence records); broader research was PARTIAL (18 Unverified
+discovery records, zero fetch-verified external records). Providers: official 6,
+tavily 18; source classes: OFFICIAL 6, UNKNOWN 16, REPUTABLE_SECONDARY 2.
+Comparables 0, funding rounds 0, deduplicated opportunities 4, features 12;
+enrichment Partial. Issue: an external source could not be fetched; discovery
+metadata retained as Unverified. No GenLayer transaction was submitted.
+
+Timing regression tests cover responses just below/above the default deadline
+with a mocked clock and six concurrent bounded searches with one provider timeout,
+retained official evidence, partial groups, retained discovery metadata and deadlines
+clipped to the remaining overall budget. Existing
+empty-success and sanitized provider-category coverage remains intact. All 183
+JavaScript tests (179 existing plus four timing/budget tests), 34 direct Python tests,
+and TypeScript validation pass.
+`git diff --check` passes. Turbopack failed on the known local port-binding
+restriction; the requested webpack production build passed. Responsive mocked
+browser QA passed at 1440 / 768 / 390 / 320 px without overflow or runtime errors.
+Timing work changes only this documentation, the external search timeout and
+mocked regression tests. No commit, push, merge, deployment or credential change.
+
+Phase 5B-2 external fetch repair: external pages have a dedicated 12-second
+absolute allowance (including DNS, redirects, TLS and body reads), capped by the
+remaining 45-second combined research deadline. Three workers fetch at most eight
+pages; the 512 KiB ceiling and all public-network safety checks remain unchanged.
+Selection reserves a candidate per query group before filling remaining slots,
+ranking PRIMARY, REPUTABLE_SECONDARY, OFFICIAL, UNKNOWN, then COMMUNITY within
+those groups. Discovery metadata survives skipped/failed fetches as Unverified;
+only fetched entity-scoped content can support claims. Funding search availability
+reflects successful discovery, independently of whether a reliable round exists;
+page failures still keep broader enrichment Partial.
+
+Live diagnostics found DNS resolution exceeding the previous four-second page
+allowance (4.642 and 5.964 seconds), rather than Tavily consuming the deadline.
+The Tavily ten-second timeout, official 12-second root/four-second child allowances,
+and 24-second official budget are unchanged. Fetch diagnostics expose only host,
+source class, query group, assigned timeout, elapsed time and fixed result codes.
