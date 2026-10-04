@@ -505,3 +505,138 @@ allowance (4.642 and 5.964 seconds), rather than Tavily consuming the deadline.
 The Tavily ten-second timeout, official 12-second root/four-second child allowances,
 and 24-second official budget are unchanged. Fetch diagnostics expose only host,
 source class, query group, assigned timeout, elapsed time and fixed result codes.
+
+## Captain’s Radar — Phase 6A
+
+Radar is a separate, read-only server subsystem in `frontend/lib/radar/`. Its generic
+`RadarSourceAdapter.discover({checkedAt, deadline})` boundary allows future sources
+without changing project research, wallets, contracts, or historical records.
+`types.ts` describes its normalized discovery/evidence/diagnostic response.
+
+`FrontRunWebsiteSource` starts at the public homepage, follows same-site public
+blog, trending, startup/sector, watchlist and receipt links, and parses passive HTML
+(including noscript content). It does not execute JavaScript or recursively crawl
+external sites. Explicit EARLY entries, project-handle flag receipts, and named
+launch/funding statements qualify; ordinary editorial mentions and unidentified
+stealth founders do not. Missing data stays null/empty. Categories are raw source
+labels, including AI, Robotics and Healthcare; every identity is UNCLASSIFIED.
+
+`FrontRunXSource` uses the existing server-only configured Tavily provider for two
+fixed account-scoped queries. Only HTTPS `x.com/frontrunvc/status/<numeric-id>`
+URLs (including twitter.com aliases) are accepted. Search snippets remain
+UNVERIFIED / DISCOVERY_ONLY, even when their URLs establish account ownership.
+Exact status metadata also survives when a snippet cannot identify a project;
+these records live in source diagnostics rather than inventing project identities. No X credentials,
+cookies, browser sessions or direct X scraping are used. Provider error codes are
+sanitized; response bodies, keys and upstream exception messages are excluded.
+
+Every event retains exact canonical source URL, title, text, publication date when
+available, check time, verification status and deterministic event ID. Identifiable
+embedded FrontRun post links are retained as `originatingPostUrl`. Publication dates
+and explicit flag dates are separate; calendar-only dates retain date precision.
+Vague relative dates do not acquire invented timestamps. Funding/investor fields
+are FrontRun claims, not independently verified CaptainScout funding intelligence.
+
+Project identities use normalized handles and website host/path keys (www,
+tracking parameters, trailing slashes and X/twitter aliases normalized). Shared
+hosting paths remain distinct. Exact strong-key overlap merges identities and
+retains all distinct source/text events, earliest flag date and retrieval time.
+Names without strong identity are scoped to the exact FrontRun source URL to avoid
+merging unrelated names. Such cautious name-only identities may remain separate
+until a later phase establishes an explicit identity bridge. Handle-based IDs stay
+stable when a website appears later; website-only IDs may change when a handle is
+subsequently established. No fuzzy name matching is performed.
+
+`GET /api/radar` returns a snapshot only; it never retrieves sources. Explicit
+`POST /api/radar/refresh` runs one bounded refresh and rejects mismatched browser
+origins. Both return no-store responses. In-flight refreshes coalesce, and a
+60-second cooldown prevents repeated calls from spending credits. Process-local
+memory keeps the latest result until restart; GET responses are cloned to prevent
+mutation. Source events accumulate during the runtime session, preserving first retrieval
+and latest check times. A failed source does not erase previously successful evidence. Diagnostics reflect the current attempt; counts describe
+fresh events, while retained evidence may also appear in the discovery pool.
+There is no durable persistence, multi-process cache guarantee, authentication or
+distributed rate limiting; a publicly exposed endpoint will need access controls
+and a shared budget before broader deployment.
+
+Refresh limits: at most 3 index pages plus 5 article pages, a bounded 24-link queue,
+2 basic Tavily queries with at most 3 results each, a 12-second homepage bootstrap,
+4-second linked-page fetches, 10-second search operations and a 30-second overall
+deadline. The homepage allowance was raised after the final sample timed out;
+that change has mocked coverage but has not received a second live refresh. Fetches reuse Phase 5 SSRF protections: public
+DNS/address validation, pinned DNS, validated redirects, credential rejection,
+512 KiB bodies, safe content types and at most 3 redirects. No new dependencies
+or weakened network controls. Adapter deadlines also bound misbehaving injected
+providers; the built-in fetch/search implementations cancel their own timed-out IO.
+
+Phase 6A does **not** classify crypto relevance, show the production Radar UI,
+persist discoveries durably, run on a schedule/background monitor, or submit
+GenLayer transactions. Phase 6B should consume identity keys, raw descriptions and
+categories, all event evidence, source trust/availability and explicit funding/flag
+claims rather than treating any category as a final crypto decision.
+
+Deterministic fixtures and regression tests: `node --test frontend/tests/radar.test.mjs`.
+
+Phase 6A local live validation (2026-10-04): one homepage acquisition plus five
+linked-page attempts, with the homepage reused from memory while adapting noscript
+parsing; no homepage re-crawl. Website: 6 pages requested, 1 successful, 3 raw
+events / 3 identities / 0 merges, five sanitized page-unavailable issues. X: 2
+queries attempted, 0 successful, 0 returned/accepted/rejected/extracted, two
+sanitized provider failures. Combined: 3 events / 3 identities / 0 merges, all 3
+with handles, 0 with websites, 2 with funding mentions, 0 with explicit calendar
+flag dates. Final parsing of the saved HTML (no further network requests) yielded
+`techdollarhq` ($3M pre-seed; 123-day claim), `orthogonal_sh` ($4.3M round led by
+Pantera; 184-day claim), and `rialto_xyz` (26-day claim). All evidence originated
+at `https://frontrun.vc/`, with no inferred originating X post or publication date.
+Only three real records were available, so a five-record live sample cannot be
+provided honestly. The validation is partial; it does not establish live article
+or X extraction success. Deterministic fixtures cover those adapters separately.
+
+
+Phase 6A repair validation (2026-10-04): the public homepage provides noscript
+anchors and schema metadata; the blog index provides normal receipt/watchlist
+anchors. No remote JavaScript was executed. `sitemap.xml` was rejected as an
+unsupported content type by the unchanged shared fetcher and is not used.
+Relative links now normalize retrieval hosts/trailing slashes, deduplicate queue
+entries, exclude static/legal/navigation resources, and prioritize public indices
+and receipts. Only indices enqueue links; articles do not crawl recursively.
+Receipt sections preserve original source text, bind explicit full dates to their
+own heading, and retain exact originating FrontRun status links. Missing official
+project websites remain null. Numbered post entries, optional handle/flag dashes,
+"days early" and pronoun/aggregate rejection have regression coverage.
+
+The previous five page failures and two X failures saved generic errors only,
+so their exact historical categories/timings cannot be recovered. Diagnostic
+fetches of the five reconstructed linked paths all succeeded outside the sandbox:
+`/blog`, `/trending`, `/startups`, `/blog/how-to-build-an-ai-deal-flow-agent`, and
+`/blog/harmonic-alternatives`. Each was assigned 4 seconds. Captured live homepage
+and article HTML replay produced 7 events, 4 identities and 3 real same-handle
+merges; this is diagnostic HTML replay, not a second fresh validation. The receipt
+`/blog/fundraise_receipts-2026-10-01/` exposed full flag dates, funding and a
+FrontRun-owned originating status link, but no official project websites.
+
+One direct Tavily diagnostic succeeded (HTTP 200, 6.847 seconds, 3 exact FrontRun
+statuses). That exceeds the previous 4-second Radar search allowance; Radar alone
+now allows 10 seconds per query. The exact historical errors remain unknown.
+Queries remain account scoped, two per refresh, three results per query. Direct X
+HTML is never fetched. Search results cannot establish independently verified
+funding, and a quoted "We raised" cannot become a project named "We".
+
+Exactly one final fresh bounded refresh ran in 17.315 seconds. Website: 1 page
+requested, 0 successful, homepage timed out after 4.004 seconds; 0 homepage or
+article events. X: 2 attempted, 1 successful, 3 raw results, 3 accepted exact
+FrontRun status URLs, 0 unrelated rejections; the other query timed out. The fresh
+run initially produced one invalid pronoun identity. That defect was fixed and
+its captured results replayed without network access: 1 project event/identity,
+0 merges, 1 handle, 0 websites, 1 funding mention, 0 full flag dates and 1 lead-time
+claim. The real identity is `@rtp`, from status `2097764994087534956`, a $35M Series A
+claim and 160-day lead claim. Three UNVERIFIED / DISCOVERY_ONLY status metadata
+records survive independently of project extraction. These corrected counts are
+explicitly offline replay counts, not a second live refresh.
+
+Phase 6A is **not checkpoint-ready** under the requested final live acceptance
+criteria: website extraction did not succeed during the sole final fresh run, and
+the homepage timeout adjustment and final parser correction remain live-unvalidated.
+No further live refresh, commit, push, tag, merge, contract change or deployment
+was performed. Deterministic coverage includes 38 Radar tests (25 original plus
+13 regressions); all seven frontend test files and 34 direct Python tests pass.
