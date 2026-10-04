@@ -41,7 +41,7 @@ async function buildFixture() {
         }
       }`,
     'enrichment.js': `export * from ${JSON.stringify(path.join(root, 'frontend/lib/scout/enrichment.ts'))};
-      export const enrichmentProvider={async enrichProject(url){return window.__enrichmentMock && url==='https://stored.example/' ? ${JSON.stringify(require('./fixtures/enrichment.json'))} : null;}};`,
+      export const enrichmentProvider={async enrichProject(url){window.__researchCalls=(window.__researchCalls||0)+1;if(window.__researchFailure)throw Error('blocked');return window.__enrichmentMock && url==='https://stored.example/' ? ${JSON.stringify(require('./fixtures/enrichment.json'))} : null;}};`,
     'entry.tsx': `import React from 'react';import {createRoot} from 'react-dom/client';
       import HomePage from ${JSON.stringify(path.join(root, 'frontend/app/page'))};
       createRoot(document.getElementById('root')).render(<HomePage/>);`,
@@ -108,7 +108,10 @@ async function checkWidth(browser, width, css, bundle) {
   await page.evaluate(() => { window.__enrichmentMock = true; });
   await page.getByRole('button', {name:'View History'}).click();
   const enriched = page.locator('.history-list .enriched-intelligence');
+  assert.equal(await page.evaluate(() => window.__researchCalls || 0), 0);
+  await enriched.getByRole('button', {name:'Research Project'}).click();
   await page.waitForFunction(() => document.querySelector('.history-list .intelligence-status')?.textContent.includes('Available'));
+  assert.equal(await page.evaluate(() => window.__researchCalls), 1);
   for (const title of ['Features & Services','Competitive Landscape','Opportunities','Funding & Investors','Evidence & Sources']) await enriched.getByText(title, {exact:true}).click();
   assert.match(await enriched.innerText(), /Verified/);
   assert.match(await enriched.innerText(), /Inferred/);
@@ -116,6 +119,11 @@ async function checkWidth(browser, width, css, bundle) {
   assert.match(await enriched.innerText(), /Mock investor/);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await enriched.screenshot({path:path.join(output, `enrichment-${width}.png`)});
+  await page.evaluate(() => {window.__researchFailure=true;});
+  await enriched.getByRole('button', {name:'Research Project'}).click();
+  await page.waitForFunction(() => document.querySelector('.history-list .intelligence-status')?.textContent.includes('Unable to verify'));
+  assert.match(await enriched.innerText(), /Onchain analysis: Complete/);
+  await page.evaluate(() => {window.__researchFailure=false;});
   await page.getByRole('button', {name:'Close History'}).click();
   await page.evaluate(() => { window.__enrichmentMock = false; });
 

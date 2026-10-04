@@ -10,6 +10,7 @@ export interface EvidenceSource {
   url: string;
   name: string;
   checkedAt: string;
+  domain?: string;
   verification: Exclude<VerificationStatus, "UNAVAILABLE">;
 }
 export interface Claim<T> {
@@ -42,6 +43,7 @@ export interface Opportunity {
 }
 export interface FundingRound {
   round: string;
+  announcementUrl?: string;
   amount: Claim<string>;
   date: Claim<string>;
   investors: Claim<string[]>;
@@ -61,13 +63,24 @@ export interface ProjectEnrichment {
   funding: Funding;
   evidence: EvidenceSource[];
   lastUpdated: string;
+  identity?: string;
+  researchedAt?: string;
+  sourceCheckedAt?: string;
+  staleAfter?: string;
+  opportunitiesStaleAfter?: string;
+  originalityExplanation?: string;
+  issues?: string[];
 }
 export interface EnrichmentProvider {
   enrichProject(sourceUrl: string, currentAnalysis: Readonly<ScoutResult>): Promise<unknown>;
 }
-// No live research provider is configured in Phase 5A.
+// Called only by the explicit research action; onchain records remain detached.
 export const enrichmentProvider: EnrichmentProvider = {
-  async enrichProject() { return null; },
+  async enrichProject(sourceUrl) {
+    const response = await fetch("/api/research", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({sourceUrl})});
+    if (!response.ok) throw new Error("Official source could not be researched safely");
+    return response.json();
+  },
 };
 export function safeSourceUrl(value: unknown): value is string {
   if (typeof value !== "string") return false;
@@ -81,6 +94,9 @@ const oneOf = (value: unknown, options: readonly string[]) => typeof value === "
 /** Reject malformed provider payloads at the boundary, including unsupported verified claims. */
 export function parseEnrichment(input: unknown, sourceUrl: string): ProjectEnrichment | null {
   if (!object(input) || input.schemaVersion !== 1 || input.sourceUrl !== sourceUrl || !safeSourceUrl(input.sourceUrl) || !timestamp(input.lastUpdated) || !Array.isArray(input.evidence)) return null;
+  for (const key of ["researchedAt", "sourceCheckedAt", "staleAfter", "opportunitiesStaleAfter"]) if (input[key] !== undefined && !timestamp(input[key])) return null;
+  if (input.issues !== undefined && (!Array.isArray(input.issues) || !input.issues.every(text))) return null;
+  if (input.originalityExplanation !== undefined && !text(input.originalityExplanation)) return null;
   const evidence = input.evidence;
   if (!evidence.every(e => object(e) && text(e.id) && safeSourceUrl(e.url) && text(e.name) && timestamp(e.checkedAt) && oneOf(e.verification, ["VERIFIED", "INFERRED", "UNVERIFIED"])) || new Set(evidence.map(e => e.id)).size !== evidence.length) return null;
   const claim = (c: unknown, validate: (v: unknown) => boolean): boolean => {
@@ -92,7 +108,7 @@ export function parseEnrichment(input: unknown, sourceUrl: string): ProjectEnric
   const feature = (v: unknown) => object(v) && text(v.title) && text(v.description) && oneOf(v.availability, ["Offered", "Announced"]) && claim(v.targetUsers, text);
   const similar = (v: unknown) => object(v) && text(v.name) && safeSourceUrl(v.url) && text(v.similarity) && text(v.differentiators);
   const opportunity = (v: unknown) => object(v) && text(v.title) && oneOf(v.type, ["Active campaign", "Testnet", "Points program", "Node opportunity", "Waitlist", "Ambassador/community program", "Incentivized activity", "Other"]) && oneOf(v.status, ["Active", "Announced", "Ended", "Unknown"]) && text(v.description) && safeSourceUrl(v.participationUrl) && safeSourceUrl(v.sourceUrl) && timestamp(v.lastChecked) && (v.deadline === undefined || timestamp(v.deadline));
-  const round = (v: unknown) => object(v) && text(v.round) && claim(v.amount, text) && claim(v.date, text) && claim(v.investors, names => Array.isArray(names) && names.length > 0 && names.every(text));
+  const round = (v: unknown) => object(v) && text(v.round) && (v.announcementUrl === undefined || safeSourceUrl(v.announcementUrl)) && claim(v.amount, text) && claim(v.date, text) && claim(v.investors, names => Array.isArray(names) && names.length > 0 && names.every(text));
   if (!claims(input.featuresAndServices, feature) || !claims(input.similarProjects, similar) || !claim(input.originalitySignal, v => oneOf(v, ["Common model", "Differentiated implementation", "Highly differentiated", "Potentially novel"])) || !claims(input.opportunities, opportunity) || !object(input.funding) || !claim(input.funding.totalKnown, text) || !claims(input.funding.rounds, round)) return null;
   return structuredClone(input) as unknown as ProjectEnrichment;
 }
@@ -113,4 +129,12 @@ export async function loadEnrichment(provider: EnrichmentProvider, analysis: Rea
     const data = parseEnrichment(payload, analysis.url);
     return data ? enrichmentState(data) : {status: "Unable to verify", data: null};
   } catch { return {status: "Unable to verify", data: null}; }
+}
+
+/** Display freshness never mutates the researched record or its evidence. */
+export function opportunityAtTime(claim: Claim<Opportunity>, staleAfter: string | undefined, now: number): Claim<Opportunity> {
+  if (!claim.value || claim.value.status !== "Active") return claim;
+  if (claim.value.deadline && Date.parse(claim.value.deadline) <= now) return {...claim, value: {...claim.value, status: "Ended"}};
+  if (staleAfter && Date.parse(staleAfter) <= now) return {...claim, verification: "UNVERIFIED", value: {...claim.value, status: "Unknown"}};
+  return claim;
 }

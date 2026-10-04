@@ -422,3 +422,6 @@ wui-list-item[data-icon="onramp"] {
 .trust-label { font-size: .75rem; border: 1px solid var(--border); border-radius: .4rem; padding: .15rem .4rem; display: inline-block; }
 .trust-inferred, .trust-unverified { color: #e4b96b; }
 .claim-sources { display: flex; flex-wrap: wrap; gap: .3rem .75rem; font-size: .8rem; margin-top: .5rem; }
+.scout-research-button { margin-top: .75rem; padding: .6rem 1rem; border: 1px solid var(--border); border-radius: .5rem; cursor: pointer; font: inherit; max-width: 100%; }
+.scout-research-button:disabled { opacity: .6; cursor: wait; }
+.scout-research-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }

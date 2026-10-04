@@ -31,7 +31,7 @@ test('trust labels distinguish verified, inferred, unverified and unavailable',(
 });
 test('historical and legacy analyses load safely without enrichment or mutation',async()=> {
   const before=structuredClone(analysis);
-  assert.deepEqual(await loadEnrichment(enrichmentProvider,analysis),{status:'Not yet enriched',data:null});
+  assert.deepEqual(await loadEnrichment({async enrichProject(){return null;}},analysis),{status:'Not yet enriched',data:null});
   assert.deepEqual(analysis,before);
   assert.equal((await loadEnrichment({enrichProject(){throw Error('must not call');}}, {project_name:'V2'})).status,'Not yet enriched');
 });

@@ -223,3 +223,66 @@ malformed payloads, provider failures and legacy records. `browser-qa.cjs` isola
 wallet/contract/provider fixtures and checks populated research plus the truthful
 production empty state at 1440, 768, 390 and 320 pixels. Synthetic research lives only
 in `frontend/tests/fixtures/enrichment.json` and the explicitly mocked QA harness.
+
+### Phase 5B-1: live official-source enrichment
+
+After a V3 analysis exists, **Research Project** requests `/api/research` on the
+Next.js Node runtime. Research remains a detached sidecar; it never writes to
+GenLayer. Opening history or rerendering does not start research. No API key,
+paid service, new dependency, or deployment setting is required.
+
+The server checks the submitted website and at most five directly linked pages:
+same-origin pages, labeled official docs/blog/news/campaign links, GitHub and
+X/Twitter. Discovery is one hop, not an open-web search. A linked source is treated
+as project-published evidence, not independent fact verification. Capability
+extraction and explicit linked product comparisons are **Inferred**; directly
+observed dated opportunity announcements and funding disclosures are **Verified**
+as official statements. Source HTML is never rendered or executed. The extractor
+uses bounded factual clauses and conservative rules rather than an LLM; unusual
+wording, non-English text, JavaScript-only pages and PDFs may be missed.
+
+Capabilities include offered/announced classification and explicit audience
+labels. Opportunities require explicit open registration plus a future ISO-date
+deadline to show Active; closed/expired items show Ended, and unclear status is
+Unverified/Unknown. This deliberately misses some genuine evergreen programs.
+Funding requires explicit raised/secured/closed wording, a named round and an
+amount; dates/investors appear only when explicitly parsed. Total funding is not
+inferred or summed. Only explicitly linked product comparisons populate similar
+projects; otherwise no reliable comparison and insufficient originality evidence
+are displayed. No claims of global uniqueness are generated.
+
+Every claim refers to deduplicated sources with URL, title, domain and checked
+UTC time. Features have a 24-hour freshness policy, opportunities one hour;
+stale Active items render Unknown. Historical funding evidence is not removed
+based on its announcement date. HTTP failures, blocks and empty pages yield
+partial/unavailable intelligence without affecting the existing onchain result.
+
+Fetch protections reject credentials, non-HTTP schemes, nonstandard ports,
+localhost/private/link-local IPs, local domains and unsafe DNS answers. Each
+redirect is revalidated; requests pin the validated DNS address while preserving
+TLS hostname checks. Limits: six pages, 256 KB per response, three redirects,
+four-second request/DNS deadlines and a 24-second research budget. Only HTML/plain
+text is accepted; scripts/styles are stripped. API bodies are limited to 4 KB,
+with same-origin browser requests and three concurrent jobs per runtime.
+
+`RuntimeRepository` holds at most 100 detached results for one hour and coalesces
+concurrent requests for the same normalized identity. It is **not persistence**:
+Vercel cold starts, runtime recycling and separate instances lose/share no cache.
+Website identities normalize protocol/www/tracking aliases, retain meaningful
+paths (to avoid conflating shared-host projects), and normalize X/Twitter handles.
+Phase 5B-2 needs a durable database keyed by project identity with append-only
+funding/evidence history, shared job/rate limits and scheduled refresh. Broader
+research also needs vetted search/index providers, better entity resolution and
+content extraction/rendering; protected social sources may require authorized
+API access. No public-access reliability is promised for sites that block bots.
+
+Regression commands: `npm run lint`, `node --test frontend/tests/*.test.mjs`,
+`python -m pytest tests/direct/ -q`, `npm run build`, `git diff --check`.
+The mocked browser harness covers 1440/768/390/320 px without live transactions.
+
+Validation note: mocked official-source/security tests and the responsive browser
+harness pass. A read-only live check of `https://ipfs.tech/` timed out in the
+current execution environment (sandbox DNS also failed); live source reliability
+has not been demonstrated here. The final production build uses Next's webpack
+CLI option because Turbopack's CSS worker hit a local-port permission error, even
+after escalation. No build script or deployment setting was changed.
