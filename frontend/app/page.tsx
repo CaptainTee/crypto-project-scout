@@ -31,7 +31,10 @@ import {
   parseProjectInput,
   PROJECT_STATE_LABELS,
   runProjectBatch,
+  retryProjects,
 } from "@/lib/scout/batch";
+
+import { COMPARISON_FIELDS, comparisonValue, EMPTY_FILTERS, FILTER_FIELDS, filterHistory, filterOptions, toggleComparison } from "@/lib/scout/history";
 
 export default function HomePage() {
   const {
@@ -49,8 +52,14 @@ export default function HomePage() {
   const [analysisCount, setAnalysisCount] = useState(0);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState("");
   const [status, setStatus] = useState("");
   const [queue, setQueue] = useState<BatchProject[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [selected, setSelected] = useState<number[]>([]);
+  const [showComparison, setShowComparison] = useState(false);
+  const visibleHistory = useMemo(() => filterHistory(history, filters), [history, filters]);
   const runningRef = useRef(false);
   const walletRef = useRef({ address, isConnected, chainId });
   walletRef.current = { address, isConnected, chainId };
@@ -84,6 +93,7 @@ export default function HomePage() {
 
     try {
       setIsLoadingHistory(true);
+      setHistoryError("");
 
       const count = await contract.getAnalysisCount();
       setAnalysisCount(count);
@@ -96,8 +106,11 @@ export default function HomePage() {
       }
 
       setHistory(items);
+      setSelected([]);
+      setShowComparison(false);
     } catch (err) {
       console.error("Failed to load history:", err);
+      setHistoryError("Could not refresh the archive. Existing records remain visible; try Refresh again.");
     } finally {
       setIsLoadingHistory(false);
     }
@@ -107,10 +120,10 @@ export default function HomePage() {
     loadHistory();
   }, [contract]);
 
-  const handleAnalyze = async () => {
+  const handleAnalyze = async (retryIndex?: number, retry = false) => {
     // A synchronous lock also protects against repeated clicks before React renders.
     if (runningRef.current) return;
-    if (!parsedInput.urls.length || parsedInput.errors.length) {
+    if (!retry && (!parsedInput.urls.length || parsedInput.errors.length)) {
       setStatus(parsedInput.errors.length ? "Fix the input errors before starting the batch." : "Enter at least one project website URL or @Xhandle.");
       inputRef.current?.focus();
       return;
@@ -124,21 +137,27 @@ export default function HomePage() {
       return;
     }
 
-    const urls = [...parsedInput.urls];
+    const targets = retry ? retryProjects(queue, retryIndex) : parsedInput.projects.map((project, index) => ({ index, project }));
+    if (!targets.length) return;
+    const urls = targets.map(({ project }) => project.url);
     const submittedWallet = { address, chainId };
     const revision = inputRevision.current;
     runningRef.current = true;
     setIsAnalyzing(true);
     setStatus("");
-    setResult(null);
-    setQueue(parsedInput.projects.map((project) => ({ ...project, state: "waiting" })));
+    if (retry) {
+      setQueue(items => items.map((item, index) => targets.some(target => target.index === index)
+        ? { url: item.url, label: item.label, state: "waiting" } : item));
+    } else {
+      setQueue(parsedInput.projects.map((project) => ({ ...project, state: "waiting" })));
+    }
     try {
       const summary = await runProjectBatch(urls, contract, {
         canSubmit: () => walletRef.current.isConnected &&
           walletRef.current.address === submittedWallet.address &&
           walletRef.current.chainId === submittedWallet.chainId,
         onUpdate: (index, update) => setQueue((items) => items.map((item, i) =>
-          i === index ? { url: item.url, label: item.label, ...update } : item)),
+          i === targets[index].index ? { url: item.url, label: item.label, ...update } : item)),
         onSuccess: async (latest) => {
           setResult(latest);
           await loadHistory();
@@ -161,8 +180,8 @@ export default function HomePage() {
       <div className="scout-container">
         <header className="scout-header">
           <div className="scout-brand">
-            <span className="scout-mark" aria-hidden="true"><Radar /></span>
-            <div>
+            <span className="scout-mark brand-logo-slot" aria-hidden="true"><Radar /></span>
+            <div className="brand-wordmark-slot">
               <h1>CaptainScout</h1>
               <p>CRYPTO INTELLIGENCE</p>
             </div>
@@ -182,8 +201,8 @@ export default function HomePage() {
 
         <section className="scout-intro" aria-labelledby="command-heading">
           <p className="eyebrow"><span /> YOUR SCOUTING COMMAND CENTER</p>
-          <h2 id="command-heading">Find the signal.<br /><span>Understand the project.</span></h2>
-          <p className="intro-description">AI-powered crypto project intelligence, classified through GenLayer consensus.</p>
+          <h2 id="command-heading">Find the signal.<br /><span>Scout the next gem.</span></h2>
+          <p className="intro-description">Explore the horizon with AI-powered crypto project intelligence, classified through GenLayer consensus.</p>
         </section>
 
         <section className="brand-card scan-panel" aria-labelledby="scan-heading">
@@ -225,7 +244,6 @@ export default function HomePage() {
                     setUrl("");
                     setStatus("");
                     inputRevision.current++;
-                    if (!runningRef.current) setQueue([]);
                     inputRef.current?.focus();
                   }}
                 >
@@ -233,7 +251,7 @@ export default function HomePage() {
                 </button>
               )}
             </div>
-            <Button className="analyze-button" disabled={isAnalyzing} onClick={handleAnalyze}>
+            <Button className="analyze-button" disabled={isAnalyzing} onClick={() => handleAnalyze()}>
               <Search aria-hidden="true" />
               {isAnalyzing ? "Analyzing..." : parsedInput.urls.length > 1
                 ? `Analyze ${parsedInput.urls.length} Projects` : "Analyze Project"}
@@ -265,6 +283,9 @@ export default function HomePage() {
             </div>
             <progress value={processedCount} max={queue.length} aria-label={`${processedCount} of ${queue.length} projects processed`} />
             {isAnalyzing && <p className="batch-help">Keep this page open. Clearing or editing the input does not cancel the running queue.</p>}
+            {!isAnalyzing && <div className="batch-summary"><p>Scouting complete · {completedCount} successful · {failedCount} failed · {queue.length} total</p>
+              {failedCount > 0 && <Button variant="outline" onClick={() => handleAnalyze(undefined, true)}>Retry Failed</Button>}
+            </div>}
             <ol className="batch-list">
               {queue.map((item, index) => (
                 <li key={item.url} className="batch-item">
@@ -274,6 +295,7 @@ export default function HomePage() {
                     <span role="status" aria-label={`${item.label}: ${PROJECT_STATE_LABELS[item.state]}`} className={`batch-state state-${item.state}`}>{PROJECT_STATE_LABELS[item.state]}</span>
                   </div>
                   {item.message && <p className={`batch-message ${item.state === "failed" ? "batch-error" : ""}`}>{item.message}</p>}
+                  {item.state === "failed" && <Button className="retry-project" variant="outline" disabled={isAnalyzing} onClick={() => handleAnalyze(index, true)} aria-label={`Retry ${item.label}`}>Retry project</Button>}
                   {item.result && <details className="batch-result">
                     <summary>View analysis: {item.result.project_name}</summary>
                     <ResultCard title={`Batch Analysis #${index + 1}`} result={item.result} />
@@ -302,7 +324,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        {result && <ResultCard title="Latest Analysis" result={result} />}
+        {(result || history[0]) && <ResultCard title="Latest Analysis" result={(result || history[0])!} />}
 
         <section className="history-section" aria-labelledby="history-heading">
           <div className="history-heading">
@@ -310,24 +332,38 @@ export default function HomePage() {
               <p className="eyebrow">INTELLIGENCE ARCHIVE</p>
               <h2 id="history-heading"><History aria-hidden="true" /> Analysis History</h2>
             </div>
-            <Button variant="outline" size="sm" className="refresh-button" onClick={loadHistory} disabled={isLoadingHistory}>
-              <RefreshCw className={isLoadingHistory ? "animate-spin" : ""} aria-hidden="true" />
-              Refresh
-            </Button>
+            <Button variant="outline" aria-expanded={historyOpen} aria-controls="analysis-history-panel" onClick={() => setHistoryOpen(open => !open)}>{historyOpen ? "Close History" : "View History"}</Button>
           </div>
+          {historyOpen && <div id="analysis-history-panel" className="archive-panel">
+            <div className="archive-toolbar"><p>Search your onchain intelligence and select 2–5 records to compare.</p>
+              <Button variant="outline" className="refresh-button" onClick={loadHistory} disabled={isLoadingHistory}><RefreshCw aria-hidden="true" />{isLoadingHistory ? "Loading…" : "Refresh"}</Button>
+            </div>
+            {historyError && <p role="alert" className="analysis-status">{historyError}</p>}
+            <div className="history-filters">
+              <label>Project / source<input type="search" value={filters.search} onChange={e => setFilters({...filters, search: e.target.value})} placeholder="Search name or URL" /></label>
+              {FILTER_FIELDS.map(field => <label key={field}>{field.replaceAll("_", " ")}<select value={filters[field]} onChange={e => setFilters({...filters, [field]: e.target.value})}><option value="">All</option>{filterOptions(history, field).map(value => <option key={value}>{value}</option>)}</select></label>)}
+              <label>Uses Crypto<select value={filters.crypto} onChange={e => setFilters({...filters, crypto: e.target.value})}><option value="">All</option><option value="true">Yes</option><option value="false">No</option></select></label>
+              <label>Minimum confidence<select value={filters.minConfidence} onChange={e => setFilters({...filters, minConfidence: Number(e.target.value)})}>{[0, 50, 75, 90].map(value => <option key={value} value={value}>{value}%</option>)}</select></label>
+              <label>Sort<select value={filters.sort} onChange={e => setFilters({...filters, sort: e.target.value})}><option value="recent">Newest stored</option><option value="confidence-high">Confidence: high first</option><option value="confidence-low">Confidence: low first</option></select></label>
+            </div>
+            <div className="archive-actions"><p role="status">{visibleHistory.length} of {history.length} records · {selected.length} selected</p><Button variant="outline" onClick={() => setFilters(EMPTY_FILTERS)}>Reset filters</Button><Button disabled={selected.length < 2} onClick={() => setShowComparison(value => !value)}>{showComparison ? "Hide Comparison" : "Compare Selected"}</Button><Button variant="outline" disabled={!selected.length} onClick={() => {setSelected([]); setShowComparison(false);}}>Clear selection</Button></div>
+            {showComparison && selected.length >= 2 && <section className="comparison-panel" aria-label="Analysis comparison"><h3>Analysis comparison</h3><p className="batch-help">Scroll horizontally to explore all selected projects.</p><div className="comparison-scroll" tabIndex={0} role="region" aria-label="Comparison table"><table><caption className="sr-only">Current stored fields for selected analyses</caption><thead><tr><th scope="col">Field</th>{selected.map(index => <th scope="col" key={index}>{history[index].project_name}</th>)}</tr></thead><tbody>{COMPARISON_FIELDS.map(([field, label]) => <tr key={field}><th scope="row">{label}</th>{selected.map(index => <td key={index}>{comparisonValue(history[index], field)}</td>)}</tr>)}</tbody></table></div></section>}
           {history.length === 0 ? (
             <div className="brand-card empty-history">
               <span className="empty-icon" aria-hidden="true"><Radar /></span>
-              <h3>No stored analyses yet.</h3>
+              <h3>{isLoadingHistory ? "Loading stored analyses…" : historyError ? "Archive unavailable" : "No stored analyses yet."}</h3>
               <p>Start with a project website above. Your intelligence archive begins here.</p>
             </div>
           ) : (
             <div className="history-list">
-              {history.map((item, index) => (
-                <ResultCard key={`${item.project_name}-${index}`} title={`Analysis #${analysisCount - index}`} result={item} />
-              ))}
+              {visibleHistory.length === 0 && <p className="empty-history">No analyses match these filters. Try resetting filters.</p>}
+              {visibleHistory.map(item => {
+                const index = history.indexOf(item);
+                return <div key={index} className="history-record"><label className="compare-select"><input type="checkbox" checked={selected.includes(index)} disabled={!selected.includes(index) && selected.length >= 5} onChange={() => setSelected(ids => toggleComparison(ids, index))} />Compare {item.project_name}</label><ResultCard title={`Analysis #${analysisCount - index}`} result={item} /></div>;
+              })}
             </div>
           )}
+          </div>}
         </section>
         <footer className="scout-footer"><span>CaptainScout</span><span>Project intelligence · Powered by GenLayer</span></footer>
       </div>
@@ -413,21 +449,22 @@ function ResultCard({
         />
       </div>
 
-      <div>
-        <div className="text-sm text-muted-foreground mb-1">
+      <div className="narrative-panel">
+        <div className="narrative-heading">
           Use Case
         </div>
 
         <p className="result-prose">{result.use_case}</p>
       </div>
 
-      <div>
-        <div className="text-sm text-muted-foreground mb-1">
+      <div className="narrative-panel">
+        <div className="narrative-heading">
           Crypto Integration
         </div>
 
         <p className="result-prose">{result.crypto_integration}</p>
       </div>
+      <details className="future-intelligence"><summary>Future intelligence modules</summary><p>These modules are planned. Data is not available in the current analysis.</p><div className="extension-grid">{["Features & Services", "Similar Projects", "Opportunities", "Funding & Investors", "Evidence & Sources"].map(label => <div key={label} data-extension-slot={label}><h4>{label}</h4><span>Not available yet</span></div>)}</div></details>
     </section>
   );
 }

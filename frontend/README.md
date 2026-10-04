@@ -52,7 +52,7 @@ After a production build, run browser QA in an environment with Playwright and C
 node frontend/tests/browser-qa.cjs
 ```
 
-Playwright is a QA-environment prerequisite, not an application dependency installed by `npm ci`. The utility tests 1440px, 390px, and 320px layouts with controlled wallet/contract fixtures and blocks external requests. It covers mixed inputs, validation, deduplication, sequential failure recovery, results, and preservation of history when clearing. Screenshots are written to a temporary directory printed by the utility; it submits no live transactions.
+Playwright is a QA-environment prerequisite, not an application dependency installed by `npm ci`. The utility tests 1440px, 768px, 390px, and 320px layouts with controlled wallet/contract fixtures and blocks external requests. It covers mixed inputs, validation, deduplication, sequential failure recovery, results, and preservation of history when clearing. Screenshots are written to a temporary directory printed by the utility; it submits no live transactions.
 
 ### Established Cloud validation procedure
 
@@ -76,3 +76,17 @@ Restore the original `frontend/next.config.ts` **byte-for-byte afterward, even i
 ## Preview deployments
 
 Review CaptainScout through the Vercel Preview deployment associated with `captainscout-redesign`. Find the current preview URL in Vercel or the commit's deployment checks; avoid relying on an ephemeral URL in documentation. The stable reviewer-facing deployment associated with `main` and its production configuration remain unchanged unless a release is explicitly approved. Vercel hosts the frontend; the existing intelligent contract runs on GenLayer Studio / Studionet.
+
+## Phase 4 archive and scouting UX
+
+The dashboard retains Stored Analyses and Latest Analysis, while View History opens an accessible expandable archive. Search project names or source URLs, filter category, chain, token status, development stage, crypto usage and minimum confidence, and sort by stored order or confidence. Filters operate on fetched records only; they never write to or remove onchain history.
+
+Select 2–5 archive records to compare their existing classification, confidence and use case. Selection stays intact while filtering and clears when history refreshes, so refreshed record positions cannot silently change the comparison. New batch completions appear in the archive after the existing history refresh.
+
+Individual Retry project and Retry Failed run only failed queue entries with the existing sequential submission and receipt verification. Successful queue results remain available, including when clearing the draft. Retries still require the existing wallet approvals. Editing the draft does not alter a running batch or its retry sources.
+
+Logo and wordmark slots retain the current radar mark and CaptainScout / Crypto Intelligence branding. Use Case and Crypto Integration have dedicated reading panels. Future intelligence modules are explicitly unavailable placeholders; no inferred or fabricated fields are displayed. The new logo, single-signature batch submission and additional contract data remain deferred.
+
+`lib/scout/history.ts` holds pure filtering and comparison helpers. `tests/history.test.mjs` covers their behavior and retry snapshots. The browser harness also exercises hidden/revealed history, search, comparison, individual retry and Retry Failed against isolated fixtures with all live requests blocked.
+
+Phase 4 validation in the local workspace: TypeScript passed; the requested Node test command passed all three test files (33 individual regressions verified by importing the suites in one Node process); all 34 direct Python tests passed; `git diff --check` passed. The default Turbopack build encountered an environment port-binding restriction, including an approved retry. `npm run build --workspace=frontend -- --webpack` passed with no configuration changes. Isolated Playwright browser QA passed at all four widths; no live GenLayer transactions were submitted. Playwright 1.51.1 and Chromium were installed only in `/tmp` for this environment.

@@ -161,3 +161,9 @@ export async function runProjectBatch(
   }
   return { completed, failed };
 }
+
+// Retry snapshots retain queue indices so successful records are never reset.
+export function retryProjects(queue: readonly BatchProject[], index?: number) {
+  return queue.flatMap((item, i) => item.state === "failed" && (index === undefined || index === i)
+    ? [{ index: i, project: item }] : []);
+}

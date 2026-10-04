@@ -88,6 +88,14 @@ async function checkWidth(browser, width, css, bundle) {
   };
   await page.waitForFunction(() => document.querySelector('.stat-count')?.textContent === '1');
 
+  assert.equal(await page.locator('.history-list').count(), 0);
+  assert.equal(await page.getByRole('button', {name:'View History'}).getAttribute('aria-expanded'), 'false');
+  await page.getByRole('button', {name:'View History'}).click();
+  assert.equal(await page.locator('.history-list .result-card').count(), 1);
+  await page.getByRole('button', {name:'Close History'}).click();
+  assert.equal(await page.locator('.history-list').count(), 0);
+  await page.getByRole('button', {name:'View History'}).click();
+
   // Invalid entries block the whole mixed batch, even with a connected wallet.
   for (const value of ['@', '@abcdefghijklmnop', '@project-name', '@project.name', '@project name', 'flop_labs']) {
     await input.fill(`https://ethereum.org/\n${value}`);
@@ -131,7 +139,7 @@ async function checkWidth(browser, width, css, bundle) {
   const history = await page.locator('.history-list').innerText();
   await clear.click();
   assert.equal(await input.inputValue(), '');
-  assert.equal(await page.locator('.batch-progress').count(), 0);
+  assert.equal(await page.locator('.batch-progress').count(), 1);
   assert.equal(await page.locator('.history-list').innerText(), history);
   assert.equal(await page.locator('.stat-count').innerText(), '2');
   assert.equal(await input.evaluate(el => el === document.activeElement), true);
@@ -166,15 +174,34 @@ async function checkWidth(browser, width, css, bundle) {
   assert.equal(await page.locator('.history-list .result-card').count(), 4);
   assert.equal(await page.locator('.scout-container > .result-card .source-link').getAttribute('href'), 'https://x.com/base');
   assert.equal(await page.locator('.analysis-status').count(), 0);
-  await page.locator('.batch-result summary').last().click();
+  await page.locator('.batch-result > summary').last().click();
   assert.equal(await page.locator('.batch-result[open] .source-link').getAttribute('href'), 'https://x.com/base');
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await page.locator('.batch-progress').screenshot({path: path.join(output, `complete-${width}.png`)});
+  await page.getByRole('button', {name:'Retry @flop_labs', exact:true}).click();
+  await waitApproval(); await page.evaluate(() => window.__qa.approve(false));
+  await page.waitForFunction(() => document.querySelector('.state-failed'));
+  await page.getByRole('button', {name:'Retry Failed', exact:true}).click();
+  await waitApproval(); await approve(); await page.evaluate(() => window.__qa.finish());
+  await page.waitForFunction(() => document.querySelectorAll('.state-complete').length === 3);
+  assert.equal(await page.locator('.batch-result').count(), 3);
+  const search = page.getByRole('searchbox', {name:'Project / source'});
+  await search.fill('stored.example'); assert.equal(await page.locator('.history-list .result-card').count(),1);
+  await search.fill('no-match'); assert.equal(await page.locator('.history-list .result-card').count(),0);
+  await page.getByRole('button', {name:'Reset filters'}).click();
+  await page.locator('.compare-select input').nth(0).check();
+  await page.locator('.compare-select input').nth(1).check();
+  await page.getByRole('button', {name:'Compare Selected'}).click();
+  assert.equal(await page.locator('.comparison-scroll tbody tr').count(),8);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.locator('.archive-panel').screenshot({path:path.join(output, `archive-${width}.png`)});
+  await page.getByRole('button', {name:'Close History'}).click();
+  assert.equal(await page.locator('.history-list').count(),0);
   await input.fill('https://ethereum.org/\n@flop_labs\n@base');
   await page.evaluate(() => scrollTo(0, 0));
   await page.screenshot({path: path.join(output, `homepage-${width}.png`)});
   assert.deepEqual(errors, []);
-  console.log(`PASS ${width}px: handle validation, mixed batches, normalized submissions/deduplication, limits, sequential failure recovery, friendly labels, latest/expandable results, clear preserves history, no overflow or runtime errors.`);
+  console.log(`PASS ${width}px: handle validation, mixed batches, normalized submissions/deduplication, limits, sequential failure recovery, friendly labels, latest/expandable results, hidden/revealed history, search/reset, comparison, individual retry, Retry Failed, clear preserves results/history, no overflow or runtime errors.`);
   await page.close();
 }
 
@@ -187,7 +214,7 @@ async function checkWidth(browser, width, css, bundle) {
   const systemChromium = '/usr/bin/chromium';
   const browser = await chromium.launch({headless: true, ...(fs.existsSync(systemChromium) ? {executablePath: systemChromium} : {}), args: ['--no-sandbox']});
   try {
-    for (const width of [1440, 390, 320]) await checkWidth(browser, width, css, bundle);
+    for (const width of [1440, 768, 390, 320]) await checkWidth(browser, width, css, bundle);
     console.log(`QA screenshots: ${output}`);
   } finally {await browser.close();}
 })().catch(error => {console.error(error); process.exitCode = 1;});
