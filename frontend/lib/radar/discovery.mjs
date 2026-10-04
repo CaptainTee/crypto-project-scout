@@ -177,7 +177,8 @@ export class FrontRunXSource {
 export function createRadarService({adapters=[new FrontRunWebsiteSource(),new FrontRunXSource()],now=()=>new Date(),cooldown=RADAR_LIMITS.cooldown}={}) {
   let cache={discoveries:[],sources:{},refreshedAt:null,issues:[],counts:{rawEvents:0,projectIdentities:0,duplicateMerges:0}};let pending=null;let lastAttempt=0;const storedEvents=new Map();
   const view=()=>({...structuredClone(cache),discoveries:cache.discoveries.map(d=>{const result=classificationService.peek(d);return {...structuredClone(d),...result,classificationStatus:result.classification.status};})});
-  return {get:view,refresh() {
+  let latestEvents=[];
+  return {get:view,latestEvents:()=>structuredClone(latestEvents),refresh() {
     if(pending)return pending;
     if(lastAttempt && Date.now()-lastAttempt<cooldown)return Promise.resolve(view());
     lastAttempt=Date.now();
@@ -189,7 +190,7 @@ export function createRadarService({adapters=[new FrontRunWebsiteSource(),new Fr
         for(const e of r.diagnostics.statusDiscoveries || [])retained.set(e.sourceUrl,{...e,checkedAt:retained.get(e.sourceUrl)?.checkedAt || e.checkedAt,lastCheckedAt:checkedAt});
         r.diagnostics.statusDiscoveries=[...retained.values()];
       }
-      const events=results.flatMap(r=>r.events);const discoveries=normalizeDiscoveries(events);
+      const events=results.flatMap(r=>r.events);latestEvents=structuredClone(events);const discoveries=normalizeDiscoveries(events);
       // Keep source events across explicit refreshes, including first retrieval precision.
       for(const event of events) {
         const evidence=event.evidence[0];const key=evidence.eventId || hash(evidence.sourceUrl + ':' + evidence.text);

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { radarService } from "@/lib/radar/discovery.mjs";
+import { readRadar } from "@/lib/radar/monitoring.mjs";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET() {
-  return NextResponse.json(radarService.get(), {headers:{"Cache-Control":"no-store"}});
+  try { return NextResponse.json(await readRadar(), {headers:{"Cache-Control":"no-store"}}); }
+  catch { return NextResponse.json({error:"Radar storage unavailable"},{status:503}); }
 }

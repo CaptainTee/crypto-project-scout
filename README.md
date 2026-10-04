@@ -700,3 +700,113 @@ Deterministic Radar fixtures and mocked browser checks extend the existing QA su
 
 Phase 6C does **not** schedule FrontRun monitoring, persist discoveries durably,
 run background jobs, auto-analyze discoveries or auto-submit GenLayer transactions.
+
+## CaptainScout v2 Phase 6D-1: durable Radar foundation
+
+Radar domain logic uses a vendor-independent repository in
+`frontend/lib/radar/repository.mjs`. The memory and Postgres adapters expose project,
+append-only discovery, classification history, review-state, monitoring-run and
+transaction operations. SQL stays inside the Postgres adapter. The only new runtime
+dependency is `pg`, the server-side Postgres driver.
+
+With no `CAPTAINSCOUT_RADAR_DATABASE_URL`, the app uses **MEMORY** (Session memory).
+It retains state across service recreation within this process, but loses it on
+restart and does not share it across instances. This is the local fallback, not
+production durability. With the server-only URL configured, it uses **POSTGRES**.
+Production durability requires configuring a Postgres-compatible database.
+Credentials never belong in `NEXT_PUBLIC_*`. Connection failure returns a sanitized
+503; it never silently falls back to memory or claims a durable write succeeded.
+
+Apply `frontend/lib/radar/migrations/001_radar.sql` explicitly before enabling
+Postgres. The migration is additive, transactional and repeatable; the application
+does not apply it automatically. Tables normalize projects, identity aliases,
+discovery events, classification history, review state and monitoring runs.
+Bounded structured records use JSONB, with stable keys, unique canonical identities
+and fingerprints, foreign keys and lookup indexes. No raw HTML is stored. Projects,
+events, classification history and monitoring runs are retained; no deletion or
+cleanup job runs in this phase.
+
+Explicit Refresh Radar calls the same `runRadarMonitoring` ingestion engine as the
+future scheduler endpoint, in both storage modes. It preserves manual classification
+semantics: refreshing sources does not automatically research projects. GET Radar
+reads the repository without crawling and returns safe persistence mode, latest run,
+total project and new review counts. Classify still accepts 1–5 identities and now
+persists classifications and evidence with history, previous status, change indicator
+and `staleAfter`. Classification changes never reset review state or delete discoveries.
+
+Project identity prefers explicit official website keys (hostname plus path to preserve
+Phase 6A shared-hosting safety), then explicit X handle; aliases
+allow a handle-only project to gain a website while keeping its ID. Name-only keys
+are scoped to the source URL. Conflicting established domains or multiple matching
+identities are skipped with a partial-run issue rather than merged automatically.
+First seen is the initial monitoring observation, never a historical lead-time claim;
+last seen advances only for identities observed again. First FrontRun flag and latest
+source event dates remain separate from retrieval dates.
+
+Discovery fingerprints include the stable project ID, canonical source URL, safely
+established event type, source publication date and normalized source fragment.
+Retrieval time and identity upgrades do not change event identity. Repeated events
+are skipped across runs. Funding receipts remain separate historical events and
+advance the latest funding mention. Event types are conservatively evidence-based:
+FRONTRUN_EARLY, FRONTRUN_MENTION, FUNDRAISE_RECEIPT, FUNDING_UPDATE or UNKNOWN.
+No first-discovery/funding claim is inferred solely from when monitoring started.
+
+Review state is independent of relevance: NEW, SEEN, REVIEWED or DISMISSED.
+`POST /api/radar/review` accepts only `projectId` and an allowed `state` (2 KiB body
+limit and same-origin checks). Cards offer Mark Seen, Mark Reviewed and Dismiss.
+Dismissal retains the card and all evidence; it never deletes data. NEW means the
+persistent identity has not been acknowledged. The existing New Gem badge keeps
+its Phase 6C time/classification meaning. Review state is currently shared across
+Radar users; per-wallet/user review ownership is outside this phase.
+
+`POST /api/radar/monitor` is scheduler-ready, authenticated with
+`Authorization: Bearer <CAPTAINSCOUT_MONITOR_SECRET>`. Missing secret makes it
+unavailable (503), including in production; wrong credentials return 401. It accepts
+no client monitoring parameters and stores no request headers or secrets. Successful
+requests run with SCHEDULED trigger, bounded source discovery and at most **5**
+automatic classification attempts. Newly discovered or UNCLASSIFIED projects are
+eligible; stale refresh requires an explicit engine policy (`refreshStale: true`)
+and is disabled by default. Existing classified projects are not researched on every
+cycle. Phase 6A source budgets remain unchanged: 3 index pages, 5 article pages,
+2 X search queries with 3 results each, 30-second discovery budget. Existing Phase
+6B per-project research bounds also remain unchanged. Automatic classification can
+add research time after discovery; scheduler timeout/cadence must account for it.
+
+Every admitted run records RUNNING then SUCCESS, PARTIAL or FAILED, trigger,
+timestamps, source statuses, discovery/upsert/dedup counters, classification counters,
+safe issues and duration. Cooldown/busy attempts are rejected before starting a run.
+The minimum cooldown is 60 seconds. Memory transactions use a shared-store mutex
+and rollback snapshot; an engine mutex also rejects duplicate concurrent calls.
+Postgres uses `pg_try_advisory_xact_lock(684601)` in a database transaction, protecting
+against overlap across instances using the same database, including review and
+classification writes. Discovery/research runs under this transaction; a connection
+is held for its duration. RUNNING is visible inside the transaction, and final records
+become visible at commit. A process crash rolls back the transaction and can leave
+no run record; independent crash-recovery/run leases are future hardening work.
+
+Source failures retain prior discoveries and commit successful sources as PARTIAL.
+Classification failure retains discovery and continues other projects. Unexpected
+ingestion/storage failures roll back all writes; the engine attempts a separate
+sanitized FAILED run record. If the database itself is unavailable, no failure record
+can be guaranteed. Existing repository and UI data remain intact; runtime discovery
+cache is independent and is not the source of truth returned by GET. SQL is
+parameterized; requests are bounded while streaming. Persistence bounds names to
+160 characters, handles to 15, URLs to 2048, funding text to 500, descriptions/source
+fragments to 2000, reason to 1000, and issue messages to fixed safe strings. Arrays
+and classification evidence are bounded. Read responses currently include retained
+history; pagination/retention tuning should be assessed as production volume grows.
+
+Deterministic tests cover cross-run A/B → A/B/C dedup, funding updates, identity
+upgrades, classification transitions, review/dismissal, first/last seen, partial and
+failed runs, rollback, locks, cooldown, auth, body bounds, migration shape and
+parameterized SQL. Shared-store and injected SQL harness recreation checks do not
+require an external database; they do not substitute for a real Postgres activation
+test. Mocked browser QA covers 1440, 768, 390 and 320 pixels without live scouting.
+
+**Production automatic monitoring is NOT activated yet.** No cron, database account,
+external migration, deployment setting or contract change is part of Phase 6D-1.
+Phase 6D-2 requires explicitly approved database provisioning/selection, applying
+this migration, securely setting the database URL and monitor secret, real Postgres
+restart/rollback/concurrency validation, choosing hosting execution timeout and
+monitoring cadence/cost policy, then explicitly configuring and validating an
+authenticated production scheduler. No GenLayer transaction is required.

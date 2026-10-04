@@ -16,6 +16,7 @@ export interface RadarEvidence {
   evidenceKind?: "DISCOVERY_ONLY";
 }
 export interface RadarDiscovery {
+  reviewState?: "NEW" | "SEEN" | "REVIEWED" | "DISMISSED";
   id: string;
   source: RadarEvidence["source"];
   sourceType: RadarEvidence["sourceType"];
@@ -80,6 +81,9 @@ export interface RadarSourceDiagnostic {
   issues: string[];
 }
 export interface RadarResponse {
+  persistenceMode?: "MEMORY" | "POSTGRES";
+  totalProjects?: number;
+  newCount?: number;
   discoveries: RadarDiscovery[];
   sources: Record<string, RadarSourceDiagnostic>;
   refreshedAt: string | null;

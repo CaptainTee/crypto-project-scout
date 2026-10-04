@@ -5,6 +5,7 @@ exports.mock=async(route,state)=>{
  state.calls.push({path:url.pathname,method:req.method()});
  if(url.pathname==='/api/radar')await route.fulfill({json:state.empty?empty:state.onlyUnclassified?{...response,discoveries:[response.discoveries[3]]}:response});
  else if(url.pathname.endsWith('/refresh'))await route.fulfill(state.failRefresh?{status:503,json:{error:'secret stack'}}:{json:response});
+ else if(url.pathname.endsWith('/review')) {const body=req.postDataJSON();await route.fulfill({json:{projectId:body.projectId,state:body.state}});}
  else {const id=req.postDataJSON().ids[0];await route.fulfill({json:{results:[state.failClassify?{id,status:'FAILED',error:'secret stack'}:{id,status:'CLASSIFIED',classification:{...response.discoveries[0].classification},classificationEvidence:[]}]}});}
  return true;
 };
@@ -16,6 +17,11 @@ exports.check=async(page,state,output,width)=>{
  await radar.getByLabel('Non-Crypto',{exact:true}).check();assert.equal(await radar.getByText('Signal c',{exact:true}).count(),1);
  await radar.getByLabel('Unclassified',{exact:true}).check();assert.equal(await radar.getByText('Signal d',{exact:true}).count(),1);
  const card=id=>radar.locator('.radar-card').filter({has:page.getByRole('heading',{name:'Signal '+id,exact:true})});
+ await radar.getByText(/Session memory/).waitFor();
+ await card('a').getByRole('button',{name:'Mark Seen',exact:true}).click();await card('a').getByText('Review state: SEEN',{exact:true}).waitFor();
+ await card('a').getByRole('button',{name:'Mark Reviewed',exact:true}).click();await card('a').getByText('Review state: REVIEWED',{exact:true}).waitFor();
+ await card('a').getByRole('button',{name:'Dismiss',exact:true}).click();await card('a').getByText('Review state: DISMISSED',{exact:true}).waitFor();
+ assert.equal(await card('a').count(),1);
  await card('a').getByRole('button',{name:'Evidence & details'}).click();assert.equal(await card('a').getByRole('button',{name:'Hide details'}).getAttribute('aria-expanded'),'true');
  for(const link of await card('a').locator('a').all()){assert.equal(await link.getAttribute('rel'),'noopener noreferrer');assert.match(await link.getAttribute('href'),/^https?:/);}
  await card('a').getByRole('button',{name:'Hide details'}).click();
