@@ -68,12 +68,15 @@ export class PostgresRadarRepository {
   async finishMonitoringRun(run) { await this.query('INSERT INTO radar_monitor_runs (run_id, started_at, record) VALUES ($1,$2,$3) ON CONFLICT (run_id) DO UPDATE SET record=EXCLUDED.record',[run.runId,run.startedAt,run]); }
   async getLatestMonitoringRun() { return (await this.query('SELECT record FROM radar_monitor_runs ORDER BY started_at DESC, run_id DESC LIMIT 1')).rows[0]?.record||null; }
 }
+export function radarPoolOptions(connectionString) {
+  return {connectionString,max:3,connectionTimeoutMillis:5000,query_timeout:10000,idleTimeoutMillis:10000,allowExitOnIdle:true};
+}
 const key=Symbol.for('captainscout.radar.repository');
 export async function getRadarRepository() {
   if(!globalThis[key]) {
     if(process.env.CAPTAINSCOUT_RADAR_DATABASE_URL) {
       const {Pool}=await import('pg');
-      globalThis[key]=new PostgresRadarRepository(new Pool({connectionString:process.env.CAPTAINSCOUT_RADAR_DATABASE_URL,max:3,connectionTimeoutMillis:5000,query_timeout:10000}));
+      globalThis[key]=new PostgresRadarRepository(new Pool(radarPoolOptions(process.env.CAPTAINSCOUT_RADAR_DATABASE_URL)));
     } else globalThis[key]=new InMemoryRadarRepository();
   }
   return globalThis[key];

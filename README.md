@@ -759,11 +759,11 @@ persistent identity has not been acknowledged. The existing New Gem badge keeps
 its Phase 6C time/classification meaning. Review state is currently shared across
 Radar users; per-wallet/user review ownership is outside this phase.
 
-`POST /api/radar/monitor` is scheduler-ready, authenticated with
+`POST /api/radar/monitor` is the explicit manual endpoint (Phase 6D-2), authenticated with
 `Authorization: Bearer <CAPTAINSCOUT_MONITOR_SECRET>`. Missing secret makes it
 unavailable (503), including in production; wrong credentials return 401. It accepts
 no client monitoring parameters and stores no request headers or secrets. Successful
-requests run with SCHEDULED trigger, bounded source discovery and at most **5**
+requests run with MANUAL trigger, bounded source discovery and at most **5**
 automatic classification attempts. Newly discovered or UNCLASSIFIED projects are
 eligible; stale refresh requires an explicit engine policy (`refreshStale: true`)
 and is disabled by default. Existing classified projects are not researched on every
@@ -810,3 +810,120 @@ this migration, securely setting the database URL and monitor secret, real Postg
 restart/rollback/concurrency validation, choosing hosting execution timeout and
 monitoring cadence/cost policy, then explicitly configuring and validating an
 authenticated production scheduler. No GenLayer transaction is required.
+
+## CaptainScout v2 Phase 6D-2: production activation preparation
+
+Target: Vercel Next.js with Neon Postgres. No production resources, migrations,
+secrets, deployment or cron activation have been performed by this change.
+The repository is prepared for the manual activation below.
+
+`CAPTAINSCOUT_RADAR_DATABASE_URL` selects POSTGRES; absent configuration selects
+MEMORY (process-local development only). Configured database failure fails closed;
+it never falls back to memory. Passive `GET /api/radar` reads storage only.
+Use Neon's pooled connection string with `sslmode=require` (TLS), preferably in a
+region geographically close to the Vercel function region. No region is hardcoded.
+The existing pg driver is retained: one shared pool per warm process, maximum three
+connections, five-second connection and ten-second query timeouts, ten-second idle
+expiry. Serverless instances each have a bounded pool; Neon pooling should be used
+to bound upstream connections across instances. SQL values are parameterized.
+
+Explicit commands, from the root with server environment securely injected:
+
+```sh
+npm run radar:migrate
+npm run radar:verify
+```
+
+Neither command loads `.env.local` automatically. Use your secure environment
+manager; do not paste credentials into commands or logs. Both require the database
+variable. Migration applies `frontend/lib/radar/migrations/001_radar.sql` explicitly,
+transactionally and idempotently; it never drops or truncates data. It never runs on
+install, build or startup. Verification uses a read-only transaction, reports safe
+mode/schema/table/query information, and returns a failing exit code when unavailable.
+It does not dump project rows. Errors never include driver messages or URLs.
+
+`GET /api/radar/cron` is the Vercel scheduler wrapper, authenticated with
+`Authorization: Bearer <CRON_SECRET>`. Missing secret returns 503; missing/wrong
+bearer returns 401. Fixed-size SHA-256 digests use timing-safe comparison.
+`POST /api/radar/monitor` retains `CAPTAINSCOUT_MONITOR_SECRET`, records MANUAL,
+and accepts no body. Cron records SCHEDULED. Both call the same monitoring engine;
+success/partial returns 200, busy/cooldown/failure returns sanitized 503. Neither
+route accesses a wallet or submits GenLayer transactions.
+
+`vercel.json` contains one GET-compatible daily cron: `0 7 * * *` (07:00 UTC,
+08:00 West Africa Time), a conservative Hobby-compatible daily cadence. A future
+Pro deployment may explicitly choose `0 */6 * * *`; that schedule is not enabled.
+Vercel function duration limits must accommodate the existing source budgets;
+check the selected plan before activation and inspect interrupted runs.
+
+Postgres monitoring holds advisory transaction lock 684601 through ingestion and
+classification. A competing invocation returns busy before crawling; manual/cron
+share the lock and 60-second persisted cooldown. Memory uses a process-local lock.
+Run creation and ingestion commit together: a function crash rolls back the
+RUNNING record and partial ingestion and releases the database lock. No stale
+RUNNING row is normally committed. An anomalous historical RUNNING row is retained;
+inspect it manually rather than deleting it. Failed-run persistence is best effort
+when the database is unavailable. Completed runs include trigger, timestamps,
+duration, source statuses, sanitized issues and ingestion/classification counters.
+
+Cross-run event fingerprints skip repeated source events, retain history, and allow
+new funding events on existing identities. First seen is immutable, last seen
+advances, and classification updates preserve NEW/SEEN/REVIEWED/DISMISSED state.
+Classification remains at most five attempts/run; existing Tavily search/page/result
+and timeout budgets are unchanged. No automatic Phase 5 deep research is added.
+
+Production activation checklist (manual account actions required):
+
+1. Create/connect Neon; choose an appropriate nearby region.
+2. Obtain its pooled TLS connection string securely.
+3. Configure `CAPTAINSCOUT_RADAR_DATABASE_URL` as a Vercel Secret-type variable.
+4. Configure `CAPTAINSCOUT_MONITOR_SECRET` as a Secret-type variable.
+5. Configure `CRON_SECRET` as a Secret-type variable.
+6. Keep `CAPTAINSCOUT_SEARCH_PROVIDER=tavily` and the Secret-type
+   `CAPTAINSCOUT_SEARCH_API_KEY` configured. Never use NEXT_PUBLIC for secrets.
+7. Run `npm run radar:migrate` with the explicitly approved target securely injected.
+8. Run `npm run radar:verify`; require schema ready and successful exit.
+9. Deploy production after approval, checking function duration limits.
+10. Invoke authenticated POST `/api/radar/monitor` once with no body, using secure
+    tooling that does not log the bearer token.
+11. Confirm durable project/event/run records and MANUAL trigger via approved DB
+    tooling or Radar UI; inspect safe counters, not private row dumps in logs.
+12. Restart/redeploy the application.
+13. Confirm the same identities, original firstSeenAt, events, classifications and
+    review states remain, with POSTGRES mode.
+14. Verify the single cron registration in Vercel.
+15. Wait for/verify the first scheduled invocation and SCHEDULED run metadata.
+16. Inspect status, source health, duration and dedup/classification counters.
+
+Scope isolation: Production uses its real DB/secrets. Preview must use a separate
+DB or memory unless sharing production is an explicit decision. Development uses
+memory or a dedicated non-production DB. Configure secrets through Vercel's
+Secret-type environment UI, not public/config variables.
+
+Future controlled restart test: on an explicitly approved non-production Neon DB,
+use the repository API to insert a uniquely named test identity/event and all four
+review states in sequence, save a classification, close the pool, recreate it, and
+assert the identity/event/classification/state remains. Record IDs locally. Repeat
+the migration and verify unchanged records. Optional fixture cleanup must target
+only those recorded IDs, deleting child fixture records before the fixture project;
+never truncate tables. Regular tests mock SQL and require no external database.
+
+Rollback: deploy the previous checkpoint/tag `captainscout-v2-phase6d1` for code.
+Disable monitoring by removing/disabling the cron entry and redeploying; verify
+registration is removed. Leave Radar database rows intact. There is no destructive
+reverse migration required for normal rollback. Previous code retains its manual
+monitor endpoint, so restrict that credential if monitoring must fully stop.
+
+Platform references: [Vercel cron GET requests](https://vercel.com/docs/cron-jobs),
+[cron authentication](https://vercel.com/docs/cron-jobs/manage-cron-jobs),
+[Hobby cadence and timing precision](https://vercel.com/docs/cron-jobs/usage-and-pricing),
+and [Neon connection guidance](https://neon.com/docs/get-started/connect-neon).
+The expression targets 07:00 UTC; Hobby execution may occur within that hour.
+
+The opt-in `frontend/scripts/radar-restart-check.mjs` exports `checkRadarRestart`.
+Call only on an approved target with `approved: true` and a `createRepository`
+factory returning `{repository, close}`; each factory invocation must create a new
+Postgres pool and `close` must call `pool.end()`. It writes a uniquely identified
+fixture, destroys/recreates the instance, verifies project/event/classification/review
+persistence and returns only the fixture ID and safe mode/result. It retains fixture
+rows for inspection and has no automatic CLI execution.

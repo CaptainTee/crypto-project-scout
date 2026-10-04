@@ -157,3 +157,35 @@ test('classification storage failure rolls back discoveries instead of claiming 
  await assert.rejects(h.run(source('EARLY: @projecta - product'),{classifyNewProjects:true,classifier}),/unavailable/);
  assert.equal((await h.repo.listProjects()).length,0);assert.equal((await h.repo.listDiscoveryEvents()).length,0);assert.equal((await h.repo.getLatestMonitoringRun()).status,'FAILED');
 });
+test('scheduler GET fails closed, preserves scheduled metadata, and sanitizes failures',async()=>{
+ const previous=process.env.CRON_SECRET;let calls=0;
+ globalThis.__cronFixture=async options=>{calls++;assert.equal(options.trigger,'SCHEDULED');assert.equal(options.classifyNewProjects,true);return {trigger:options.trigger,status:'PARTIAL'};};
+ try {
+  const route=await loadRoute('../app/api/radar/cron/route.ts',{'@/lib/radar/monitoring.mjs':'const runRadarMonitoring=options=>globalThis.__cronFixture(options);'});
+  assert.equal(route.POST,undefined);
+  const request=token=>new Request('https://captain.example/api/radar/cron',{headers:token?{authorization:token}:{}});
+  delete process.env.CRON_SECRET;assert.equal((await route.GET(request())).status,503);
+  process.env.CRON_SECRET='fixture-cron';
+  for(const token of [undefined,'Bearer wrong','Bearer fixture','Basic fixture-cron'])assert.equal((await route.GET(request(token))).status,401);
+  assert.equal(calls,0);const result=await route.GET(request('Bearer fixture-cron'));assert.equal(result.status,200);assert.deepEqual(await result.json(),{trigger:'SCHEDULED',status:'PARTIAL'});
+  globalThis.__cronFixture=async()=>{throw Error('fixture-cron private stack');};const failure=await route.GET(request('Bearer fixture-cron'));assert.equal(failure.status,503);assert.doesNotMatch(await failure.text(),/fixture-cron|stack/);
+ } finally {if(previous===undefined)delete process.env.CRON_SECRET;else process.env.CRON_SECRET=previous;delete globalThis.__cronFixture;}
+});
+test('cron configuration and manual endpoint use intended schedule and trigger, passive route has no execution imports',async()=>{
+ const {readFile}=await import('node:fs/promises');
+ const config=JSON.parse(await readFile(new URL('../../vercel.json',import.meta.url),'utf8'));assert.deepEqual(config.crons,[{path:'/api/radar/cron',schedule:'0 7 * * *'}]);
+ const manual=await readFile(new URL('../app/api/radar/monitor/route.ts',import.meta.url),'utf8');assert.match(manual,/trigger:'MANUAL'/);
+ for(const path of ['../app/api/radar/cron/route.ts','../app/api/radar/route.ts'])assert.doesNotMatch(await readFile(new URL(path,import.meta.url),'utf8'),/genlayer|wallet|sendTransaction/i);
+ assert.doesNotMatch(await readFile(new URL('../app/api/radar/route.ts',import.meta.url),'utf8'),/runRadarMonitoring|discovery|classification|tavily/i);
+});
+test('three scheduled days retain original events while inserting funding update',async()=>{
+ const h=harness();const ab=source('EARLY: @projecta - product; EARLY: @projectb - product');
+ await h.run(ab,{trigger:'SCHEDULED'});h.next();const abc=[...ab,...source('EARLY: @projectc - product')];await h.run(abc,{trigger:'SCHEDULED'});h.next();
+ const run=await h.run([...abc,...source('Project A raised $5M seed project: @projecta',start,'Fundraise Receipt')],{trigger:'SCHEDULED'});
+ assert.equal(run.trigger,'SCHEDULED');assert.equal(run.duplicatesSkipped,3);assert.equal(run.eventsInserted,1);assert.equal((await h.repo.listProjects()).length,3);assert.equal((await h.repo.listDiscoveryEvents()).length,4);
+ const a=(await h.repo.listProjects()).find(p=>p.projectHandle==='projecta');assert.equal(a.firstSeenAt,start);assert.equal(a.lastSeenAt,'2026-10-03T00:00:00.000Z');
+});
+test('every review state survives repository recreation',async()=>{
+ const h=harness();await h.run(source('EARLY: @projecta - product'));const id=(await h.repo.listProjects())[0].id;
+ for(const state of ['NEW','SEEN','REVIEWED','DISMISSED']) {await h.repo.updateReviewState(id,state);assert.equal((await new InMemoryRadarRepository(h.store).getReviewState(id)).state,state);}
+});

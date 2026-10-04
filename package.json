@@ -10,7 +10,9 @@
     "build": "cd frontend && npm run build",
     "start": "cd frontend && npm run start",
     "lint": "cd frontend && npm run lint",
-    "deploy": "genlayer deploy"
+    "deploy": "genlayer deploy",
+    "radar:migrate": "node frontend/scripts/radar-db.mjs migrate",
+    "radar:verify": "node frontend/scripts/radar-db.mjs verify"
   },
   "devDependencies": {
     "genlayer-js": "^1.1.8"
