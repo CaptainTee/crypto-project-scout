@@ -154,3 +154,72 @@ Existing GitHub CI runs contract lint, direct tests, TypeScript, and a productio
 ## License
 
 [MIT](LICENSE).
+
+## CaptainScout v2 Phase 5A: enriched intelligence foundation
+
+Development is on `captainscout-v2`. Phase 4 collapsed history, filters, comparison,
+sequential batching and X-handle support remain intact. Captain's Radar stays
+“Coming in CaptainScout v2”; monitoring is not implemented.
+
+V3 stores JSON strings in `analysis_history` and `latest_by_url`, with
+`last_url`, `last_result` and `analysis_count`. Its exact analysis schema contains
+project name, crypto usage, category, chain, token status, development stage,
+use case, crypto integration, confidence and the stored source URL. History is
+read newest first through `get_analysis_count` and `get_analysis_at`; legacy V2
+records may omit the URL. Existing records and the contract wrapper are unchanged.
+The V3 prompt and validator do not produce structured enrichment or claim citations.
+Extracting those from its short narratives would not provide verified research.
+Adding persisted enrichment to GenLayer would require an explicitly approved
+contract/schema design and deployment or upgrade; Phase 5A does neither.
+
+`frontend/lib/scout/enrichment.ts` defines the separate `ProjectEnrichment` sidecar,
+claim/evidence types, provider interface, payload validation and derived availability.
+Features distinguish offered from announced services and include separately sourced
+target users. Competitors include similarities and differentiators; originality is
+a bounded signal that does not establish global uniqueness. Opportunities include
+status, participation/source links, check time and optional deadline. Funding tracks
+known totals, individual rounds, amounts, dates and named investors with their own
+claim statuses. Evidence supplies URL, name/domain, check timestamp and verification.
+Every populated claim must reference evidence; Verified claims need a Verified
+source. These structural checks cannot establish factual truth: a future provider
+must actually review sources and justify the claim-level verification it assigns.
+Unavailable claims have null values, with no guessed zeros or invented names.
+Malformed payloads, unsafe links and unresolved source references are rejected.
+
+The provider receives a detached V3 record and returns an untrusted payload for
+validation. It returns null in production today: no research, credentials, network
+calls, enrichment persistence or new application backend is introduced. Result
+cards show onchain completion separately from enrichment availability. Enrichment,
+when supplied, renders in collapsible sections with claim labels and linked sources.
+Historical records safely show “Additional intelligence has not been enriched yet.”
+Comparison continues to use the existing eight onchain fields. Radar can implement
+the same provider interface and emit sidecars for discovered project URLs, without
+requiring those fields to exist in an onchain analysis.
+
+### Phase 5B requirements for real intelligence
+
+- Select and implement an approved live research adapter and its execution location.
+  Official website/announcement research needs source retrieval, content extraction,
+  project identity matching, citations and checked timestamps for offered versus
+  promised services and target users.
+- Similar projects require a researched candidate corpus, cited similarity and
+  differentiator claims, and bounded originality reasoning. Never infer global
+  uniqueness from a limited search.
+- Live opportunities need official participation links, evidence for status and
+  deadlines, periodic rechecks and expiry/staleness handling.
+- Funding/investor information needs official round announcements or an approved
+  database, entity matching, currency/date handling and deduplication of rounds so
+  totals do not double count. Preserve unknown totals and unconfirmed investors.
+- Decide persistence, stable project/analysis identity, cache expiry, refresh/error
+  behavior and provider provenance. Current sidecars are transient, not onchain.
+  If retrieval requires secrets or scheduled/server-side research, explicitly approve
+  credentials and backend infrastructure before implementing it. Paid services are
+  optional provider choices, not dependencies of this foundation. Any GenLayer
+  enrichment contract path requires separate approval and compatibility review.
+
+Validation: `node --test frontend/tests/*.test.mjs` includes complete/partial/missing
+information, trust labels, multi-source evidence, funding/opportunity representation,
+malformed payloads, provider failures and legacy records. `browser-qa.cjs` isolates
+wallet/contract/provider fixtures and checks populated research plus the truthful
+production empty state at 1440, 768, 390 and 320 pixels. Synthetic research lives only
+in `frontend/tests/fixtures/enrichment.json` and the explicitly mocked QA harness.

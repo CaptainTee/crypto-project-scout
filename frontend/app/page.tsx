@@ -36,6 +36,8 @@ import {
 
 import { COMPARISON_FIELDS, comparisonValue, EMPTY_FILTERS, FILTER_FIELDS, filterHistory, filterOptions, toggleComparison } from "@/lib/scout/history";
 
+import { EnrichedIntelligence } from "@/components/EnrichedIntelligence";
+
 export default function HomePage() {
   const {
     address,
@@ -421,6 +423,7 @@ function ResultCard({
         )}
       </div>
 
+      <h4 className="narrative-heading">Project Snapshot · Onchain GenLayer analysis</h4>
       <div className="result-fields">
         <Field
           title="Uses Crypto"
@@ -470,7 +473,7 @@ function ResultCard({
 
         <p className="result-prose">{result.crypto_integration}</p>
       </div>
-      <details className="future-intelligence"><summary>Future intelligence modules</summary><p>These modules are planned. Data is not available in the current analysis.</p><div className="extension-grid">{["Features & Services", "Similar Projects", "Opportunities", "Funding & Investors", "Evidence & Sources"].map(label => <div key={label} data-extension-slot={label}><h4>{label}</h4><span>Not available yet</span></div>)}</div></details>
+      <EnrichedIntelligence analysis={result} />
     </section>
   );
 }

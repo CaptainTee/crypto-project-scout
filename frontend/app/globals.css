@@ -408,3 +408,17 @@ wui-list-item[data-icon="onramp"] {
   .intro-signal { width: 72px; height: 72px; }
   .intro-signal img { width: 100%; height: 100%; }
 }
+
+/* Phase 5A: offchain research stays visually separate from the snapshot. */
+.enriched-intelligence { border-top: 1px solid var(--border); padding-top: 1.25rem; min-width: 0; }
+.intelligence-status { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; font-size: .85rem; }
+.intelligence-note { color: var(--muted-foreground); font-size: .85rem; margin: .6rem 0; }
+.intelligence-section { border-top: 1px solid var(--border); margin-top: .75rem; padding-top: .75rem; }
+.intelligence-section summary { cursor: pointer; font-weight: 600; padding: .4rem 0; }
+.enrichment-claim { padding: .75rem 0; overflow-wrap: anywhere; }
+.enrichment-claim h4 { font-weight: 600; margin: .4rem 0; }
+.enrichment-claim p { margin: .35rem 0; }
+.enrichment-claim a { color: var(--primary); text-decoration: underline; }
+.trust-label { font-size: .75rem; border: 1px solid var(--border); border-radius: .4rem; padding: .15rem .4rem; display: inline-block; }
+.trust-inferred, .trust-unverified { color: #e4b96b; }
+.claim-sources { display: flex; flex-wrap: wrap; gap: .3rem .75rem; font-size: .8rem; margin-top: .5rem; }

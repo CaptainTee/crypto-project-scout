@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 1,
+  "sourceUrl": "https://stored.example/",
+  "lastUpdated": "2026-10-04T10:00:00Z",
+  "evidence": [
+    {
+      "id": "official",
+      "url": "https://research.example/official",
+      "name": "Official",
+      "checkedAt": "2026-10-04T10:00:00Z",
+      "verification": "VERIFIED"
+    },
+    {
+      "id": "announcement",
+      "url": "https://research.example/announcement",
+      "name": "Announcement",
+      "checkedAt": "2026-10-04T10:00:00Z",
+      "verification": "VERIFIED"
+    }
+  ],
+  "featuresAndServices": [
+    {
+      "value": {
+        "title": "Mock service",
+        "description": "Explicit browser QA fixture service.",
+        "availability": "Offered",
+        "targetUsers": {
+          "value": "Developers",
+          "verification": "INFERRED",
+          "evidenceIds": [
+            "official",
+            "announcement"
+          ]
+        }
+      },
+      "verification": "VERIFIED",
+      "evidenceIds": [
+        "official",
+        "announcement"
+      ]
+    }
+  ],
+  "similarProjects": [
+    {
+      "value": {
+        "name": "Mock peer",
+        "url": "https://peer.example/",
+        "similarity": "Shared infrastructure model",
+        "differentiators": "Different supported networks"
+      },
+      "verification": "INFERRED",
+      "evidenceIds": [
+        "official",
+        "announcement"
+      ]
+    }
+  ],
+  "originalitySignal": {
+    "value": "Differentiated implementation",
+    "verification": "INFERRED",
+    "evidenceIds": [
+      "official",
+      "announcement"
+    ]
+  },
+  "opportunities": [
+    {
+      "value": {
+        "title": "Mock testnet",
+        "type": "Testnet",
+        "status": "Active",
+        "description": "Automated QA fixture only",
+        "participationUrl": "https://research.example/join",
+        "sourceUrl": "https://research.example/announcement",
+        "lastChecked": "2026-10-04T10:00:00Z",
+        "deadline": "2026-11-01T00:00:00Z"
+      },
+      "verification": "VERIFIED",
+      "evidenceIds": [
+        "official",
+        "announcement"
+      ]
+    }
+  ],
+  "funding": {
+    "totalKnown": {
+      "value": "USD 2 million",
+      "verification": "VERIFIED",
+      "evidenceIds": [
+        "official",
+        "announcement"
+      ]
+    },
+    "rounds": [
+      {
+        "value": {
+          "round": "Seed",
+          "amount": {
+            "value": "USD 2 million",
+            "verification": "VERIFIED",
+            "evidenceIds": [
+              "official",
+              "announcement"
+            ]
+          },
+          "date": {
+            "value": "2026-09-01",
+            "verification": "VERIFIED",
+            "evidenceIds": [
+              "official",
+              "announcement"
+            ]
+          },
+          "investors": {
+            "value": [
+              "Mock investor"
+            ],
+            "verification": "VERIFIED",
+            "evidenceIds": [
+              "official",
+              "announcement"
+            ]
+          }
+        },
+        "verification": "VERIFIED",
+        "evidenceIds": [
+          "official",
+          "announcement"
+        ]
+      }
+    ]
+  }
+}

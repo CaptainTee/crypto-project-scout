@@ -40,6 +40,8 @@ async function buildFixture() {
           } finally {q.active--;}
         }
       }`,
+    'enrichment.js': `export * from ${JSON.stringify(path.join(root, 'frontend/lib/scout/enrichment.ts'))};
+      export const enrichmentProvider={async enrichProject(url){return window.__enrichmentMock && url==='https://stored.example/' ? ${JSON.stringify(require('./fixtures/enrichment.json'))} : null;}};`,
     'entry.tsx': `import React from 'react';import {createRoot} from 'react-dom/client';
       import HomePage from ${JSON.stringify(path.join(root, 'frontend/app/page'))};
       createRoot(document.getElementById('root')).render(<HomePage/>);`,
@@ -55,6 +57,7 @@ async function buildFixture() {
           '@/lib/contracts/CryptoProjectScout': path.join(work, 'contract.js'),
           '@/lib/genlayer/wallet': path.join(work, 'wallet.js'),
           '@/lib/genlayer/client': path.join(work, 'client.js'),
+          '@/lib/scout/enrichment': path.join(work, 'enrichment.js'),
           '@': path.join(root, 'frontend'),
         },
       },
@@ -98,6 +101,23 @@ async function checkWidth(browser, width, css, bundle) {
   const wallet = await page.locator('.wallet-button').boundingBox();
   assert(brand.y + brand.height <= wallet.y || brand.x + brand.width <= wallet.x, 'Brand and wallet must not collide');
   await page.screenshot({path: path.join(output, `branding-${width}.png`)});
+
+  assert.match(await page.locator('.intelligence-status').first().innerText(), /Onchain analysis: Complete.*Enriched intelligence: Not yet enriched/s);
+  assert.equal(await page.locator('.intelligence-section').count(), 0);
+  assert.match(await page.locator('.enriched-intelligence').innerText(), /Additional intelligence has not been enriched yet/);
+  await page.evaluate(() => { window.__enrichmentMock = true; });
+  await page.getByRole('button', {name:'View History'}).click();
+  const enriched = page.locator('.history-list .enriched-intelligence');
+  await page.waitForFunction(() => document.querySelector('.history-list .intelligence-status')?.textContent.includes('Available'));
+  for (const title of ['Features & Services','Competitive Landscape','Opportunities','Funding & Investors','Evidence & Sources']) await enriched.getByText(title, {exact:true}).click();
+  assert.match(await enriched.innerText(), /Verified/);
+  assert.match(await enriched.innerText(), /Inferred/);
+  assert.equal(await enriched.getByRole('link', {name:'Participation details'}).getAttribute('href'), 'https://research.example/join');
+  assert.match(await enriched.innerText(), /Mock investor/);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await enriched.screenshot({path:path.join(output, `enrichment-${width}.png`)});
+  await page.getByRole('button', {name:'Close History'}).click();
+  await page.evaluate(() => { window.__enrichmentMock = false; });
 
   assert.equal(await page.locator('.history-list').count(), 0);
   assert.equal(await page.getByRole('button', {name:'View History'}).getAttribute('aria-expanded'), 'false');
