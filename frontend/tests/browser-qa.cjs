@@ -70,9 +70,11 @@ async function buildFixture() {
 async function checkWidth(browser, width, css, bundle) {
   const page = await browser.newPage({viewport: {width, height: 1100}});
   const errors = [];
+  const radarState = {calls:[]};
   page.on('pageerror', error => errors.push(error.message));
-  await page.route('**/*', route => {
+  await page.route('**/*', async route => {
     const url = route.request().url();
+    if(await require("./radar-browser.cjs").mock(route,radarState))return;
     if (url === 'http://captainscout.test/bundle.js') return route.fulfill({contentType: 'application/javascript; charset=utf-8', body: bundle});
     if (url === 'http://captainscout.test/') return route.fulfill({contentType: 'text/html; charset=utf-8', body: `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head><body><div id="root"></div><script src="/bundle.js"></script></body></html>`});
     if (url.startsWith('http://captainscout.test/branding/')) {
@@ -94,6 +96,8 @@ async function checkWidth(browser, width, css, bundle) {
     await page.waitForFunction(() => typeof window.__qa.finish === 'function');
   };
   await page.waitForFunction(() => document.querySelector('.stat-count')?.textContent === '1');
+
+  await require("./radar-browser.cjs").check(page,radarState,output,width);
 
   assert.equal(await page.locator('.scout-mark img').evaluate(img => img.complete && img.naturalWidth > 0), true);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
@@ -249,7 +253,7 @@ async function checkWidth(browser, width, css, bundle) {
   const search = page.getByRole('searchbox', {name:'Project / source'});
   await search.fill('stored.example'); assert.equal(await page.locator('.history-list .result-card').count(),1);
   await search.fill('no-match'); assert.equal(await page.locator('.history-list .result-card').count(),0);
-  await page.getByRole('button', {name:'Reset filters'}).click();
+  await page.locator('.archive-panel').getByRole('button', {name:'Reset filters'}).click();
   await page.locator('.compare-select input').nth(0).check();
   await page.locator('.compare-select input').nth(1).check();
   await page.getByRole('button', {name:'Compare Selected'}).click();
@@ -263,6 +267,7 @@ async function checkWidth(browser, width, css, bundle) {
   await page.screenshot({path: path.join(output, `homepage-${width}.png`)});
   assert.deepEqual(errors, []);
   console.log(`PASS ${width}px: handle validation, mixed batches, normalized submissions/deduplication, limits, sequential failure recovery, friendly labels, latest/expandable results, hidden/revealed history, search/reset, comparison, individual retry, Retry Failed, clear preserves results/history, no overflow or runtime errors.`);
+  await require("./radar-browser.cjs").emptyChecks(page,radarState);
   await page.close();
 }
 

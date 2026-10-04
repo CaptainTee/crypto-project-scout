@@ -36,6 +36,8 @@ import {
 
 import { COMPARISON_FIELDS, comparisonValue, EMPTY_FILTERS, FILTER_FIELDS, filterHistory, filterOptions, toggleComparison } from "@/lib/scout/history";
 
+import { CaptainsRadar } from "@/components/CaptainsRadar";
+
 import { EnrichedIntelligence } from "@/components/EnrichedIntelligence";
 
 export default function HomePage() {
@@ -368,10 +370,13 @@ export default function HomePage() {
           )}
           </div>}
         </section>
-        <aside className="radar-preview" aria-labelledby="radar-preview-heading">
-          <Radar aria-hidden="true" />
-          <div><h2 id="radar-preview-heading">Captain’s Radar</h2><p>Coming in CaptainScout v2</p></div>
-        </aside>
+        <CaptainsRadar onResearch={identity => {
+          setUrl(identity);
+          setStatus("");
+          inputRevision.current++;
+          inputRef.current?.scrollIntoView({behavior: "instant", block: "center"});
+          inputRef.current?.focus({preventScroll: true});
+        }} />
 
         <footer className="scout-footer"><span>CaptainScout</span><span>Project intelligence · Powered by GenLayer</span></footer>
       </div>

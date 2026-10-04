@@ -660,3 +660,43 @@ Limits: five projects per explicit run, sequential concurrency, two official pag
 Limitations: conservative English sentence rules can miss nuanced technical claims or suppress mixed investor/product sentences; source retrieval does not prove claims true; snippets may omit relevant details. A manual review flag is a handoff to Phase 6C. Phase 6B does NOT persist classification durably, automatically schedule Radar monitoring, build production Radar cards, or auto-submit projects to GenLayer. Phase 6C can consume the classification/evidence/cache metadata for filters, badges, sorting, review and explicit Research Project actions.
 
 Phase 6B bounded live validation (2026-10-04): 31 FrontRun identities were retrieved; only five distinct projects were processed. Raw category was unavailable (`null`) for all five, so no category distribution was forced. HIFI → CRYPTO_RELEVANT / 80 (explicit “builds infrastructure for tokenized capital markets”, 10 evidence sentences); Limited → POSSIBLY_CRYPTO / 60 (self-custodial global accounts, 8 evidence sentences); Preview and Enigma → UNCLASSIFIED / null (ambiguous name-only identity, 2 evidence sentences each); Doxxnet → UNCLASSIFIED / null (insufficient product coverage, 59 collected evidence sentences before the final duplicate-reference protection). All five had empty network lists and needsReview=true. The two technical claims came from the retrieved [September 24 FrontRun receipt](https://frontrun.vc/blog/fundraise_receipts-2026-09-24); official coverage was absent, so review remains appropriate. All original discovery evidence was preserved. The live sample did not provide a safely supported NON_CRYPTO example; deterministic fixtures cover that outcome and cross-sector Robotics/Base, AI/ZK and FinTech/stablecoin cases.
+
+### Phase 6C — Captain’s Radar UI
+
+Captain’s Radar sits below Analysis History in the existing navy/mint dashboard.
+Initial load reads only `GET /api/radar` from the process-local cache. Refresh Radar
+explicitly invokes the bounded server discovery refresh; cards remain visible while
+refreshing and when a refresh fails. Source health reports partial availability
+without exposing provider errors.
+
+The default view includes Crypto Relevant and Possibly Crypto discoveries. All
+four stored classification states can be selected; an entirely unclassified cache
+is shown with an explanation. Local search covers project, handle, category,
+networks and server classification reason. Filters include classification, network,
+source event, Needs Review, funding mention and retrieval within 30 days. Sorts
+include newest retrieval, earliest explicit FrontRun flag, confidence, lead-time
+claim and presence of a funding mention, with unknown values last and stable ID ties.
+
+Cards show attributed funding, distinct flag dates and lead-time claims, explicit
+classified networks, confidence, review status, first retrieval and classification
+freshness. Expandable details expose server reasons, crypto signals, raw discovery
+metadata, classification evidence and FrontRun provenance events. External links
+accept only HTTP(S) without embedded credentials.
+
+**New Gem rule:** Crypto Relevant plus an explicit FrontRun flag date (or source
+publication date when no flag exists) within the preceding 30 days; future dates
+and missing/invalid source dates do not qualify. Retrieval time is never used.
+
+Classify and Refresh Classification explicitly call the Phase 6B API for one
+identity. Failures remain local to that card and preserve its previous state.
+Research Project fills and focuses Analyze Projects using an explicit website,
+then a valid @handle. Missing reliable identity disables the action. It does not
+press Analyze, request wallet approval or submit a transaction.
+
+Radar uses 12 cards plus Show more, two desktop columns and one column at tablet
+and mobile sizes. Wrapping controls, readable status text, labeled filters, visible
+focus outlines and accessible disclosures support keyboard and narrow-screen use.
+Deterministic Radar fixtures and mocked browser checks extend the existing QA suite.
+
+Phase 6C does **not** schedule FrontRun monitoring, persist discoveries durably,
+run background jobs, auto-analyze discoveries or auto-submit GenLayer transactions.
