@@ -44,7 +44,7 @@ Copy `frontend/.env.example` to `frontend/.env.local`; never commit secrets. Ver
 
 ## CaptainScout Development Rules
 
-- The active development branch is `captainscout-redesign`.
+- The active development branch is `captainscout-v2`.
 - Never modify, merge into, or push directly to `main` unless explicitly instructed. `main` is the stable GenLayer Portal reviewer-facing version.
 - Do not deploy a new GenLayer contract or upgrade the existing deployed contract without explicit approval.
 - Preserve the current GenLayer storage layout whenever an in-place contract upgrade is intended.
