@@ -38,7 +38,10 @@ export interface RadarDiscovery {
   frontRunLeadTimeDays: number | null;
   evidence: RadarEvidence[];
   identityKeys: string[];
-  classificationStatus: "UNCLASSIFIED";
+  classificationStatus: RadarClassification["status"];
+  classification?: RadarClassification;
+  classificationEvidence?: ClassificationEvidence[];
+  classificationCache?: {status: "MISS" | "FRESH" | "STALE"; expiresAt: string | null};
 }
 export interface RadarSourceAdapter {
   id: string;
@@ -82,4 +85,30 @@ export interface RadarResponse {
   refreshedAt: string | null;
   issues: string[];
   counts: {rawEvents: number; projectIdentities: number; duplicateMerges: number};
+}
+
+export interface RadarClassification {
+  status: "CRYPTO_RELEVANT" | "POSSIBLY_CRYPTO" | "NON_CRYPTO" | "UNCLASSIFIED";
+  confidence: number | null;
+  reason: string | null;
+  cryptoSignals: string[];
+  networks: string[];
+  evidenceIds: string[];
+  classifiedAt: string | null;
+  sourceCoverage: {frontrun: boolean; officialProject: boolean; broaderWeb: boolean};
+  needsReview: boolean;
+  tokenStatus: "LIVE" | "ANNOUNCED" | "PLANNED" | "UNKNOWN" | "NO_TOKEN_EVIDENCE";
+}
+export interface ClassificationEvidence {
+  id: string;
+  sourceType: "FRONTRUN" | "OFFICIAL" | "PROJECT_X" | "WEB";
+  sourceUrl: string;
+  title: string;
+  snippet: string;
+  provider: string;
+  verification: "VERIFIED" | "INFERRED" | "UNVERIFIED" | "UNAVAILABLE";
+  checkedAt: string;
+  signalType: string;
+  signalStrength: "STRONG" | "MEDIUM" | "WEAK" | "NONE";
+  stale: boolean;
 }

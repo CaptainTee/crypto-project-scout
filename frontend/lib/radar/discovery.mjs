@@ -1,3 +1,4 @@
+import { classificationService } from './classification.mjs';
 import { createHash } from 'node:crypto';
 import { fetchOfficial, fetchDiagnostic, normalizedUrl, parsePage } from '../scout/research.mjs';
 import { configuredSearchProvider, providerDiagnostic } from '../scout/search.mjs';
@@ -175,9 +176,10 @@ export class FrontRunXSource {
 }
 export function createRadarService({adapters=[new FrontRunWebsiteSource(),new FrontRunXSource()],now=()=>new Date(),cooldown=RADAR_LIMITS.cooldown}={}) {
   let cache={discoveries:[],sources:{},refreshedAt:null,issues:[],counts:{rawEvents:0,projectIdentities:0,duplicateMerges:0}};let pending=null;let lastAttempt=0;const storedEvents=new Map();
-  return {get:()=>structuredClone(cache),refresh() {
+  const view=()=>({...structuredClone(cache),discoveries:cache.discoveries.map(d=>{const result=classificationService.peek(d);return {...structuredClone(d),...result,classificationStatus:result.classification.status};})});
+  return {get:view,refresh() {
     if(pending)return pending;
-    if(lastAttempt && Date.now()-lastAttempt<cooldown)return Promise.resolve(structuredClone(cache));
+    if(lastAttempt && Date.now()-lastAttempt<cooldown)return Promise.resolve(view());
     lastAttempt=Date.now();
     pending=(async()=>{const checkedAt=now().toISOString();const deadline=Date.now()+RADAR_LIMITS.total;
       const results=await Promise.all(adapters.map(async adapter=>{try{return {id:adapter.id,...await bounded(()=>adapter.discover({checkedAt,deadline}),RADAR_LIMITS.total)};}catch{return {id:adapter.id,events:[],diagnostics:{...diagnostic(),checkedAt,status:'UNAVAILABLE',issues:['Radar source unavailable']}};}}));
@@ -195,7 +197,7 @@ export function createRadarService({adapters=[new FrontRunWebsiteSource(),new Fr
         storedEvents.set(key,{...event,evidence:[{...evidence,checkedAt:previous?.evidence[0].checkedAt || evidence.checkedAt,lastCheckedAt:checkedAt}]});
       }
       cache={discoveries:normalizeDiscoveries([...storedEvents.values()]),sources:Object.fromEntries(results.map(r=>[r.id,r.diagnostics])),refreshedAt:checkedAt,issues:results.flatMap(r=>r.diagnostics.issues),counts:{rawEvents:events.length,projectIdentities:discoveries.length,duplicateMerges:events.length-discoveries.length}};
-      return structuredClone(cache);
+      return view();
     })().finally(()=>{pending=null;});return pending;
   }};
 }
