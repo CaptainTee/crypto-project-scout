@@ -72,6 +72,10 @@ async function checkWidth(browser, width, css, bundle) {
     const url = route.request().url();
     if (url === 'http://captainscout.test/bundle.js') return route.fulfill({contentType: 'application/javascript; charset=utf-8', body: bundle});
     if (url === 'http://captainscout.test/') return route.fulfill({contentType: 'text/html; charset=utf-8', body: `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head><body><div id="root"></div><script src="/bundle.js"></script></body></html>`});
+    if (url.startsWith('http://captainscout.test/branding/')) {
+      const asset = path.basename(new URL(url).pathname);
+      return route.fulfill({contentType: 'image/svg+xml', body: fs.readFileSync(path.join(root, 'frontend/public/branding', asset))});
+    }
     return route.abort(); // No live requests or transactions from this harness.
   });
   await page.goto('http://captainscout.test/');
@@ -87,6 +91,13 @@ async function checkWidth(browser, width, css, bundle) {
     await page.waitForFunction(() => typeof window.__qa.finish === 'function');
   };
   await page.waitForFunction(() => document.querySelector('.stat-count')?.textContent === '1');
+
+  assert.equal(await page.locator('.scout-mark img').evaluate(img => img.complete && img.naturalWidth > 0), true);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  const brand = await page.locator('.scout-brand').boundingBox();
+  const wallet = await page.locator('.wallet-button').boundingBox();
+  assert(brand.y + brand.height <= wallet.y || brand.x + brand.width <= wallet.x, 'Brand and wallet must not collide');
+  await page.screenshot({path: path.join(output, `branding-${width}.png`)});
 
   assert.equal(await page.locator('.history-list').count(), 0);
   assert.equal(await page.getByRole('button', {name:'View History'}).getAttribute('aria-expanded'), 'false');
@@ -214,6 +225,11 @@ async function checkWidth(browser, width, css, bundle) {
   const systemChromium = '/usr/bin/chromium';
   const browser = await chromium.launch({headless: true, ...(fs.existsSync(systemChromium) ? {executablePath: systemChromium} : {}), args: ['--no-sandbox']});
   try {
+    const icons = await browser.newPage({viewport: {width: 420, height: 160}, deviceScaleFactor: 2});
+    const iconData = fs.readFileSync(path.join(root, 'frontend/public/branding/captainscout-mark.svg')).toString('base64');
+    await icons.setContent(`<body style="background:#111e2a;color:#eaf0f5;font-family:system-ui;display:flex;gap:40px;align-items:center">${[16,32,64].map(size => `<div><img alt="CaptainScout" width="${size}" height="${size}" src="data:image/svg+xml;base64,${iconData}"><p>${size}px</p></div>`).join('')}</body>`);
+    await icons.screenshot({path: path.join(output, 'icon-sizes.png')});
+    await icons.close();
     for (const width of [1440, 768, 390, 320]) await checkWidth(browser, width, css, bundle);
     console.log(`QA screenshots: ${output}`);
   } finally {await browser.close();}

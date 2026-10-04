@@ -5,6 +5,7 @@ import { Providers } from "./providers";
 export const metadata: Metadata = {
   title: "CaptainScout | Crypto Intelligence",
   description: "Scout crypto projects with CaptainScout. AI-powered project intelligence and classification using GenLayer consensus.",
+  applicationName: "CaptainScout",
   manifest: "/site.webmanifest",
   icons: {
     icon: [

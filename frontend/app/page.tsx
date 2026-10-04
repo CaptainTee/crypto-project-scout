@@ -180,7 +180,7 @@ export default function HomePage() {
       <div className="scout-container">
         <header className="scout-header">
           <div className="scout-brand">
-            <span className="scout-mark brand-logo-slot" aria-hidden="true"><Radar /></span>
+            <span className="scout-mark brand-logo-slot" aria-hidden="true"><img src="/branding/captainscout-mark.svg" alt="" width="44" height="44" /></span>
             <div className="brand-wordmark-slot">
               <h1>CaptainScout</h1>
               <p>CRYPTO INTELLIGENCE</p>
@@ -200,9 +200,10 @@ export default function HomePage() {
         </header>
 
         <section className="scout-intro" aria-labelledby="command-heading">
+          <div className="intro-signal" aria-hidden="true"><img src="/branding/captainscout-gem.svg" alt="" width="112" height="112" /></div>
           <p className="eyebrow"><span /> YOUR SCOUTING COMMAND CENTER</p>
-          <h2 id="command-heading">Find the signal.<br /><span>Scout the next gem.</span></h2>
-          <p className="intro-description">Explore the horizon with AI-powered crypto project intelligence, classified through GenLayer consensus.</p>
+          <h2 id="command-heading">Find the signal.<br /><span>Discover the next gem.</span></h2>
+          <p className="intro-description">AI-powered crypto project intelligence, classified through GenLayer consensus.</p>
         </section>
 
         <section className="brand-card scan-panel" aria-labelledby="scan-heading">
@@ -365,6 +366,11 @@ export default function HomePage() {
           )}
           </div>}
         </section>
+        <aside className="radar-preview" aria-labelledby="radar-preview-heading">
+          <Radar aria-hidden="true" />
+          <div><h2 id="radar-preview-heading">Captain’s Radar</h2><p>Coming in CaptainScout v2</p></div>
+        </aside>
+
         <footer className="scout-footer"><span>CaptainScout</span><span>Project intelligence · Powered by GenLayer</span></footer>
       </div>
     </main>

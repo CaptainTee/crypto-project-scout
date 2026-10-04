@@ -388,3 +388,23 @@ wui-list-item[data-icon="onramp"] {
   .narrative-panel { padding: 16px; }.history-filters input { font-size: 16px; }
   .archive-actions > button { white-space: normal; min-height: 44px; height: auto; }
 }
+
+/* Original scout identity; text stays native for crisp small-screen reading. */
+.scout-mark { border: 0; background: transparent; }
+.scout-mark img { width: 100%; height: 100%; }
+.scout-brand h1, .scout-brand p { white-space: nowrap; }
+.scout-intro { position: relative; isolation: isolate; overflow: clip; }
+.intro-signal { position: absolute; right: 28px; top: 60px; z-index: -1; opacity: .55; pointer-events: none; }
+.intro-signal::before { content: ""; position: absolute; inset: -24px; border: 1px solid var(--border); border-radius: 50%; }
+.radar-preview { display: flex; align-items: center; gap: 12px; margin-top: 32px; padding: 18px 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); }
+.radar-preview > svg { width: 24px; height: 24px; color: var(--blue); flex-shrink: 0; }
+.radar-preview h2 { font-size: 14px; font-weight: 600; }
+.radar-preview p { margin-top: 4px; color: var(--muted-foreground); font-size: 12px; }
+@media (max-width: 768px) { .intro-signal { right: 0; top: 24px; opacity: .16; } }
+@media (max-width: 540px) {
+  .scout-header { align-items: flex-start; }
+  .wallet-button { margin-left: auto; }
+  .scout-intro h2 { font-size: clamp(27px, 8.5vw, 34px); }
+  .intro-signal { width: 72px; height: 72px; }
+  .intro-signal img { width: 100%; height: 100%; }
+}
