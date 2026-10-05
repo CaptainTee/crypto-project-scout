@@ -123,6 +123,19 @@ test('monitor HTTP route authentication and sanitized response without source ca
   assert.equal((await POST(request())).status,503);process.env.CAPTAINSCOUT_MONITOR_SECRET='fixture-only';
   assert.equal((await POST(request('Bearer wrong'))).status,401);assert.equal(calls,0);
   const success=await POST(request('Bearer fixture-only'));assert.equal(success.status,200);assert.doesNotMatch(await success.text(),/fixture-only/);assert.equal(calls,1);
+  const streamedRequest=stream=>new Request('https://captain.example/api/radar/monitor',{method:'POST',headers:{authorization:'Bearer fixture-only'},body:stream,duplex:'half'});
+  const emptyStream=new ReadableStream({start(controller){controller.enqueue(new Uint8Array(0));controller.close();}});
+  const emptyRequest=streamedRequest(emptyStream);assert.ok(emptyRequest.body);
+  assert.equal((await POST(emptyRequest)).status,200);assert.equal(calls,2);
+  for(const body of [' ', '{}', 'x']) {
+   const rejected=await POST(new Request('https://captain.example/api/radar/monitor',{method:'POST',headers:{authorization:'Bearer fixture-only'},body}));
+   assert.equal(rejected.status,400);assert.deepEqual(await rejected.json(),{error:'Monitoring does not accept a request body'});assert.equal(calls,2);
+  }
+  let cancelled=false;
+  const nonemptyStream=new ReadableStream({start(controller){controller.enqueue(new Uint8Array(0));controller.enqueue(new Uint8Array([1]));},cancel(){cancelled=true;}});
+  assert.equal((await POST(streamedRequest(nonemptyStream))).status,400);assert.equal(cancelled,true);assert.equal(calls,2);
+  const unauthorized=new Request('https://captain.example/api/radar/monitor',{method:'POST',headers:{authorization:'Bearer wrong'},body:'{}'});
+  assert.equal((await POST(unauthorized)).status,401);assert.equal(unauthorized.bodyUsed,false);assert.equal(calls,2);
  } finally {if(previousSecret===undefined)delete process.env.CAPTAINSCOUT_MONITOR_SECRET;else process.env.CAPTAINSCOUT_MONITOR_SECRET=previousSecret;if(previousMode===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=previousMode;delete globalThis.__monitorFixture;}
 });
 test('review HTTP route enforces bounded state-only mutation and preserves classification',async()=>{
