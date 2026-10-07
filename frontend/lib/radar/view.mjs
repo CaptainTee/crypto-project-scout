@@ -83,13 +83,16 @@ export function selectDiscoveries(records, filters, search='', sort='newest', no
 export function classificationAction(discovery) {
  const d = discovery || {};
  const usable = ['CRYPTO_RELEVANT','POSSIBLY_CRYPTO','NON_CRYPTO'].includes(statusOf(d));
- const retry = usable && (d.classificationFailed === true || d.classificationCache?.status === 'STALE');
+ const cacheStatus = d.classificationCache?.status;
+ const persisted = usable || cacheStatus === 'FRESH' || cacheStatus === 'STALE';
+ const retry = persisted && (d.classificationFailed === true || cacheStatus === 'STALE');
+ const unknown = !persisted && cacheStatus !== 'MISS';
  return {
-  label: usable ? (retry ? 'Retry Classification' : 'Refresh Classification') : 'Classify',
-  mode: usable ? (retry ? 'RETRY' : 'REFRESH') : 'CLASSIFY',
-  refresh: usable,
-  disabled: false,
-  reason: usable ? (retry ? 'Earlier classification retained; retry evidence collection.' : 'Refresh the existing classification explicitly.') : 'No usable classification is available.',
+  label: persisted ? (retry ? 'Retry Classification' : 'Refresh Classification') : 'Classify',
+  mode: persisted ? (retry ? 'RETRY' : 'REFRESH') : 'CLASSIFY',
+  refresh: persisted,
+  disabled: unknown,
+  reason: unknown ? 'Classification history is unavailable; reload to determine whether classification or refresh is needed.' : persisted ? (retry ? 'Earlier classification retained; retry evidence collection.' : 'Refresh the existing classification explicitly.') : 'No persisted classification is available.',
  };
 }
 /** Unknown or absent cache metadata never implies freshness. */

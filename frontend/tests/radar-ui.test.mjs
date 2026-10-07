@@ -140,23 +140,46 @@ for(const status of ['CRYPTO_RELEVANT','POSSIBLY_CRYPTO','NON_CRYPTO'])test(`cla
   const action=classificationAction({...input,...extra});assert.deepEqual([action.label,action.mode,action.refresh],['Retry Classification','RETRY',true]);
  }
 });
-test('first classification and missing metadata fail safely without inventing freshness',()=>{
- for(const input of [undefined,null,{}, {classificationStatus:'UNCLASSIFIED'}, {classification:{status:'UNCLASSIFIED'},classificationCache:{status:'STALE'}}, {classificationStatus:'UNKNOWN'}]){
-  const action=classificationAction(input);assert.deepEqual([action.label,action.mode,action.refresh,action.disabled],['Classify','CLASSIFY',false,false]);assert(action.reason);
+for(const [cacheStatus,label,mode,refresh] of [
+ ['MISS','Classify','CLASSIFY',false],
+ ['FRESH','Refresh Classification','REFRESH',true],
+ ['STALE','Retry Classification','RETRY',true],
+])test(`UNCLASSIFIED with ${cacheStatus} selects the correct classification action`,()=>{
+ const input={classification:{status:'UNCLASSIFIED'},classificationCache:{status:cacheStatus}};
+ const action=classificationAction(input);
+ assert.deepEqual([action.label,action.mode,action.refresh,action.disabled],[label,mode,refresh,false]);
+ assert(action.reason);
+});
+test('failed persisted UNCLASSIFIED classification retries while a cache miss remains a first attempt',()=>{
+ for(const status of ['FRESH','STALE']){
+  const action=classificationAction({classification:{status:'UNCLASSIFIED'},classificationCache:{status},classificationFailed:true});
+  assert.deepEqual([action.label,action.mode,action.refresh,action.disabled],['Retry Classification','RETRY',true,false]);
+ }
+ assert.equal(classificationAction({classificationCache:{status:'MISS'},classificationFailed:true}).refresh,false);
+});
+test('missing and unknown metadata fail closed without inventing freshness',()=>{
+ for(const input of [undefined,null,{}, {classificationStatus:'UNCLASSIFIED'}, {classificationStatus:'UNKNOWN'}]){
+  const action=classificationAction(input);assert.deepEqual([action.label,action.mode,action.refresh,action.disabled],['Classify','CLASSIFY',false,true]);assert.match(action.reason,/history is unavailable/);
+  assert.equal(classificationCacheLabel(input),null);
  }
  for(const status of [undefined,'UNKNOWN','toString','__proto__']){
-  const input={classification:{status:'CRYPTO_RELEVANT'},classificationCache:{status}};
-  assert.equal(classificationCacheLabel(input),null);assert.equal(classificationAction(input).mode,'REFRESH');
+  for(const classificationStatus of ['UNCLASSIFIED','CRYPTO_RELEVANT']){
+   const input={classification:{status:classificationStatus},classificationCache:{status}};
+   assert.equal(classificationCacheLabel(input),null);
+   assert.equal(classificationAction(input).disabled,classificationStatus==='UNCLASSIFIED');
+   assert.equal(classificationAction(input).mode,classificationStatus==='UNCLASSIFIED'?'CLASSIFY':'REFRESH');
+  }
  }
- assert.equal(classificationCacheLabel({}),null);
  for(const [status,label] of [['FRESH','Fresh'],['STALE','Stale'],['MISS','Not classified']])assert.equal(classificationCacheLabel({classificationCache:{status}}),label);
 });
 test('classification action is deterministic pure and independent of review state',()=>{
- const input=Object.freeze({classification:Object.freeze({status:'POSSIBLY_CRYPTO',needsReview:true}),classificationCache:Object.freeze({status:'STALE'})});
- const before=JSON.stringify(input),expected=classificationAction(input);
- for(const reviewState of ['NEW','SEEN','REVIEWED','DISMISSED',undefined,'UNKNOWN'])assert.deepEqual(classificationAction({...input,reviewState}),expected);
- assert.deepEqual(classificationAction(input),expected);assert.equal(JSON.stringify(input),before);
- expected.label='changed';assert.equal(classificationAction(input).label,'Retry Classification');
+ for(const status of ['UNCLASSIFIED','POSSIBLY_CRYPTO'])for(const cacheStatus of ['MISS','FRESH','STALE',undefined])for(const classificationFailed of [false,true]){
+  const input=Object.freeze({classification:Object.freeze({status,needsReview:true}),classificationCache:Object.freeze({status:cacheStatus}),classificationFailed});
+  const before=JSON.stringify(input),expected=classificationAction(input);
+  for(const reviewState of ['NEW','SEEN','REVIEWED','DISMISSED',undefined,'UNKNOWN'])assert.deepEqual(classificationAction({...input,reviewState}),expected);
+  assert.deepEqual(classificationAction(input),expected);assert.equal(JSON.stringify(input),before);
+  expected.label='changed';assert.notEqual(classificationAction(input).label,'changed');
+ }
 });
 async function classificationHarness() {
  const {readFile}=await import('node:fs/promises');
@@ -193,7 +216,7 @@ test('failed refresh retains exact local result, sanitized feedback and retry re
  h.requests[1].resolve({ok:false});await retry;assert.deepEqual(h.state.data,before);
 });
 test('first classify sends refresh false and failure keeps unclassified project intact',async()=>{
- const h=await classificationHarness(),project={...h.project,classification:null,classificationStatus:'UNCLASSIFIED'};
+ const h=await classificationHarness(),project={...h.project,classification:null,classificationStatus:'UNCLASSIFIED',classificationCache:{status:'MISS'}};
  h.state.data.discoveries[0]=project;const before=structuredClone(h.state.data),pending=h.classify(project);
  assert.equal(JSON.parse(h.requests[0].options.body).refresh,false);
  h.requests[0].resolve({ok:false});await pending;assert.deepEqual(h.state.data,before);assert.equal(h.state.errors.a,'Classification could not be completed.');
