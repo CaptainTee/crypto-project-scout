@@ -50,6 +50,16 @@ export function researchIdentity(d) {return resolveResearchTarget(d).value;}
 // New Gem requires an explicit source date within 30 days, never retrieval time.
 export function isNewGem(d, now=Date.now()) {const time=Date.parse(d.frontRunFlaggedAt || d.sourcePublishedAt);return statusOf(d)==='CRYPTO_RELEVANT'&&Number.isFinite(time)&&time<=now&&now-time<=30*86400000;}
 export const REVIEW_LABELS = {NEW:'New to Review',SEEN:'Seen',REVIEWED:'Reviewed',DISMISSED:'Dismissed'};
+/** Pure contextual actions; unknown states never infer persisted state. */
+export function reviewActions(reviewState) {
+ const actions = {
+  NEW:[['Mark Seen','SEEN'],['Mark Reviewed','REVIEWED'],['Dismiss','DISMISSED']],
+  SEEN:[['Mark New','NEW'],['Mark Reviewed','REVIEWED'],['Dismiss','DISMISSED']],
+  REVIEWED:[['Reopen Review','SEEN'],['Dismiss','DISMISSED']],
+  DISMISSED:[['Restore to Review','NEW']],
+ };
+ return Object.hasOwn(actions,reviewState) ? actions[reviewState].map(([label,state])=>({label,state})) : [];
+}
 /** Counts only stored review states; missing states are never inferred. */
 export function reviewCounts(records) {
  const counts = {NEW:0,SEEN:0,REVIEWED:0,DISMISSED:0};

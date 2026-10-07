@@ -202,3 +202,15 @@ test('every review state survives repository recreation',async()=>{
  const h=harness();await h.run(source('EARLY: @projecta - product'));const id=(await h.repo.listProjects())[0].id;
  for(const state of ['NEW','SEEN','REVIEWED','DISMISSED']) {await h.repo.updateReviewState(id,state);assert.equal((await new InMemoryRadarRepository(h.store).getReviewState(id)).state,state);}
 });
+
+test('review workflow reverses through all states preserving project, events and classification history',async()=>{
+ const h=harness();await h.run(source('EARLY: @projecta - product'));const id=(await h.repo.listProjects())[0].id;
+ await h.repo.transaction(tx=>persistClassification(tx,id,{classification:{...emptyClassification(),status:'CRYPTO_RELEVANT',needsReview:true,classifiedAt:start},classificationEvidence:[]}));
+ const project=await h.repo.getProject(id),history=await h.repo.listClassifications(id),events=await h.repo.listDiscoveryEvents();
+ for(const state of ['NEW','SEEN','REVIEWED','SEEN','DISMISSED','NEW']){
+  await h.repo.updateReviewState(id,state);const recreated=new InMemoryRadarRepository(h.store);
+  assert.equal((await recreated.getReviewState(id)).state,state);
+  assert.equal((await readRadar(recreated)).discoveries[0].reviewState,state);
+  assert.deepEqual(await recreated.getProject(id),project);assert.deepEqual(await recreated.listClassifications(id),history);assert.deepEqual(await recreated.listDiscoveryEvents(),events);
+ }
+});

@@ -2,17 +2,31 @@
 import { useEffect, useRef, useState } from 'react';
 import { Radar } from 'lucide-react';
 import type { RadarDiscovery, RadarResponse, RadarResearchTarget } from '@/lib/radar/types';
-import { LABELS, REVIEW_LABELS, reviewCounts, defaults, isNewGem, resolveResearchTarget, safeUrl, selectDiscoveries, statusOf } from '@/lib/radar/view.mjs';
+import { LABELS, REVIEW_LABELS, reviewActions, reviewCounts, defaults, isNewGem, resolveResearchTarget, safeUrl, selectDiscoveries, statusOf } from '@/lib/radar/view.mjs';
 const readable = (value: string | null | undefined) => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'}) : 'Not available';
 function External({url,children}:{url:string;children:React.ReactNode}) {const safe=safeUrl(url);return safe?<a href={safe} target="_blank" rel="noopener noreferrer">{children}</a>:<span>{children}</span>;}
 export function CaptainsRadar({onResearch}:{onResearch:(identity:string)=>void}) {
  const [data,setData]=useState<RadarResponse|null>(null),[loading,setLoading]=useState(true),[refreshing,setRefreshing]=useState(false),[warning,setWarning]=useState('');
  const [filters,setFilters]=useState(defaults),[search,setSearch]=useState(''),[sort,setSort]=useState('newest'),[limit,setLimit]=useState(12),[open,setOpen]=useState<string[]>([]),[busy,setBusy]=useState<string[]>([]),[errors,setErrors]=useState<Record<string,string>>({});
+ const [reviewBusy,setReviewBusy]=useState<string[]>([]),[dismissConfirm,setDismissConfirm]=useState<string[]>([]),[reviewMessages,setReviewMessages]=useState<Record<string,string>>({});
+ const reviewLocks=useRef(new Set<string>());
  const locks=useRef(new Set<string>());
  useEffect(()=>{let active=true;fetch('/api/radar',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error();return r.json();}).then(d=>{if(active)setData(d);}).catch(()=>{if(active)setWarning('Radar cache could not be loaded. Try Refresh Radar.');}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[]);
  async function refresh(){if(locks.current.has('refresh'))return;locks.current.add('refresh');setRefreshing(true);setWarning('');try{const r=await fetch('/api/radar/refresh',{method:'POST'});if(!r.ok)throw Error();setData(await r.json());}catch{setWarning('Radar refresh unavailable. Existing discoveries remain available.');}finally{locks.current.delete('refresh');setRefreshing(false);}}
  async function classify(d:RadarDiscovery){if(locks.current.has(d.id))return;locks.current.add(d.id);setBusy(v=>[...v,d.id]);setErrors(v=>({...v,[d.id]:''}));try{const r=await fetch('/api/radar/classify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:[d.id],refresh:statusOf(d)!=='UNCLASSIFIED'})});if(!r.ok)throw Error();const result=(await r.json()).results?.find((v:{id:string})=>v.id===d.id);if(!result||result.status==='FAILED')throw Error();setData(v=>v?{...v,discoveries:v.discoveries.map(item=>item.id===d.id?{...item,classification:result.classification,classificationStatus:result.classification.status,classificationEvidence:result.classificationEvidence,classificationCache:result.classificationCache}:item)}:v);}catch{setErrors(v=>({...v,[d.id]:'Classification evidence unavailable. Please try again.'}));}finally{locks.current.delete(d.id);setBusy(v=>v.filter(id=>id!==d.id));}}
- async function review(d:RadarDiscovery,state:string){try{const r=await fetch('/api/radar/review',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectId:d.id,state})});if(!r.ok)throw Error();const result=await r.json();setData(v=>v?{...v,discoveries:v.discoveries.map(item=>item.id===d.id?{...item,reviewState:result.state}:item)}:v);}catch{setErrors(v=>({...v,[d.id]:'Review update unavailable. Please try again.'}));}}
+ async function review(d:RadarDiscovery,state:string){
+  if(reviewLocks.current.has(d.id)||!reviewActions(d.reviewState).some((action:{label:string;state:string})=>action.state===state))return;
+  reviewLocks.current.add(d.id);setReviewBusy(v=>[...v,d.id]);setReviewMessages(v=>({...v,[d.id]:''}));
+  try{
+   const r=await fetch('/api/radar/review',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectId:d.id,state})});
+   if(!r.ok)throw Error();const result=await r.json();if(result.state!==state)throw Error();
+   setData(v=>v?{...v,discoveries:v.discoveries.map(item=>item.id===d.id?{...item,reviewState:result.state}:item)}:v);
+   setDismissConfirm(v=>v.filter(id=>id!==d.id));
+   setReviewMessages(v=>({...v,[d.id]:`Review state updated: ${REVIEW_LABELS[state as keyof typeof REVIEW_LABELS]}.`}));
+  }catch{setReviewMessages(v=>({...v,[d.id]:'Review update unavailable. Please try again.'}));}
+  finally{reviewLocks.current.delete(d.id);setReviewBusy(v=>v.filter(id=>id!==d.id));}
+ }
+
  const records=data?.discoveries||[],visible:RadarDiscovery[]=selectDiscoveries(records,filters,search,sort);
  const counts=reviewCounts(records);
  const reset=()=>{setFilters(defaults());setSearch('');setSort('newest');setLimit(12);};
@@ -37,8 +51,7 @@ export function CaptainsRadar({onResearch}:{onResearch:(identity:string)=>void})
   <p className="radar-muted" role="status">{records.length>0?`${visible.length} matching discoveries`:''}</p>
   <div className="radar-grid">{visible.slice(0,limit).map(d=>{const c=d.classification,expanded=open.includes(d.id),target:RadarResearchTarget=resolveResearchTarget(d),identity=target.value;return <article className="radar-card" key={d.id}>
    <div className="radar-badges"><span className={`radar-badge radar-${statusOf(d).toLowerCase()}`}>{LABELS[statusOf(d) as keyof typeof LABELS]}</span>{c?.confidence!=null&&<span>{c.confidence}% confidence</span>}{isNewGem(d)&&<span className="radar-badge">◇ New Gem</span>}{c?.needsReview&&<span className="radar-badge" title="CaptainScout found incomplete, conflicting, or weak evidence.">Classification Needs Review</span>}</div>
-   {d.reviewState==='NEW'&&<span className="radar-badge" title="This Radar identity has not been acknowledged">New to Review</span>}
-   {d.reviewState&&<p className="radar-muted">Review state: {d.reviewState}</p>}
+   <p>Review state: <span className="radar-badge">{REVIEW_LABELS[d.reviewState as keyof typeof REVIEW_LABELS]||'Unavailable'}</span></p>
    <h3>{d.projectName}</h3>{d.projectHandle&&<p className="radar-handle">@{d.projectHandle.replace(/^@/,'')}</p>}
    {d.rawCategory&&<p className="radar-muted">FrontRun category: {d.rawCategory}</p>}
    <div className="radar-badges">{c?.networks.map(n=><span className="radar-badge" key={n}>{n}</span>)}</div>
@@ -50,7 +63,11 @@ export function CaptainsRadar({onResearch}:{onResearch:(identity:string)=>void})
    <p className="radar-muted">First retrieved: <time dateTime={d.discoveredAt}>{readable(d.discoveredAt)}</time></p>
    {c?.classifiedAt&&<p className="radar-muted">Classification checked: <time dateTime={c.classifiedAt}>{readable(c.classifiedAt)}</time>{d.classificationCache?.status==='STALE'?' · Stale':''}</p>}
    <div className="radar-actions"><button className="radar-primary" disabled={!identity} title={!identity?target.reason:undefined} onClick={()=>identity&&onResearch(identity)}>Research Project</button><button disabled={busy.includes(d.id)} onClick={()=>classify(d)}>{busy.includes(d.id)?'Checking relevance…':statusOf(d)==='UNCLASSIFIED'?'Classify':'Refresh Classification'}</button><button aria-expanded={expanded} aria-controls={`radar-details-${d.id}`} onClick={()=>setOpen(v=>expanded?v.filter(id=>id!==d.id):[...v,d.id])}>{expanded?'Hide details':'Evidence & details'}</button></div>
-   {d.reviewState&&<div className="radar-actions"><button onClick={()=>review(d,'SEEN')}>Mark Seen</button><button onClick={()=>review(d,'REVIEWED')}>Mark Reviewed</button><button onClick={()=>review(d,'DISMISSED')}>Dismiss</button></div>}
+   <div role="group" aria-label={`Review actions for ${d.projectName}`} aria-busy={reviewBusy.includes(d.id)}>
+    <div className="radar-actions">{reviewActions(d.reviewState).map((action:{label:string;state:string})=><button key={action.state} disabled={reviewBusy.includes(d.id)} onClick={()=>{if(action.state==='DISMISSED')setDismissConfirm(v=>v.includes(d.id)?v:[...v,d.id]);else{setDismissConfirm(v=>v.filter(id=>id!==d.id));void review(d,action.state);}}}>{action.label}</button>)}</div>
+    {dismissConfirm.includes(d.id)&&<div><p>Dismiss {d.projectName}? You can restore it to review later.</p><div className="radar-actions"><button disabled={reviewBusy.includes(d.id)} onClick={()=>review(d,'DISMISSED')}>Confirm dismiss</button><button disabled={reviewBusy.includes(d.id)} onClick={()=>setDismissConfirm(v=>v.filter(id=>id!==d.id))}>Cancel</button></div></div>}
+    <p role="status" aria-live="polite">{reviewBusy.includes(d.id)?'Updating review state…':reviewMessages[d.id]}</p>
+   </div>
    <div className="radar-muted">{identity?<><p>Identity: {identity}</p><p>Identity confidence: {target.confidence}</p><p>Source: {({DISCOVERY:'FrontRun discovery',PERSISTED_IDENTITY:'Persisted identity',VERIFIED_EVIDENCE:'Verified evidence',NONE:'Unavailable'})[target.source]}</p></>:<><p>Research unavailable</p><p>Identity confidence: {target.confidence}</p><p>Reason: {target.reason}</p></>}</div>{errors[d.id]&&<p role="alert" className="radar-warning">{errors[d.id]}</p>}
    {expanded&&<div id={`radar-details-${d.id}`} className="radar-details"><h4>Crypto signals</h4><p>{c?.cryptoSignals.join(' · ')||'No classified signals available'}</p>{c&&<p>Token evidence: {c.tokenStatus.replaceAll('_',' ')} · Classification evidence: {c.needsReview?'Classification Needs Review':'Not flagged'}</p>}<h4>Raw FrontRun discovery</h4><p>{d.rawDescription}</p>{d.projectWebsite&&<p><External url={d.projectWebsite}>Project website</External></p>}{d.founderNames.length>0&&<p>Founders: {d.founderNames.join(', ')}</p>}{d.investors.length>0&&<p>FrontRun investor mentions: {d.investors.join(', ')}</p>}<h4>Provenance & source events</h4>{d.evidence.map((e,i)=><div key={`${e.eventId}-${i}`}><External url={e.sourceUrl}>{e.sourceTitle||e.source} · {e.sourceType}</External><p>{e.text}</p><p className="radar-muted">{e.verification} · First retrieved: {readable(e.checkedAt)}{e.sourcePublishedAt?` · Published: ${readable(e.sourcePublishedAt)}`:''}</p>{e.originatingPostUrl&&<External url={e.originatingPostUrl}>Originating post</External>}</div>)}<h4>Classification evidence</h4>{d.classificationEvidence?.map(e=><div key={e.id}><External url={e.sourceUrl}>{e.title||e.sourceType}</External><p>{e.snippet}</p><p className="radar-muted">{e.verification} · {e.signalStrength} · Checked {readable(e.checkedAt)}{e.stale?' · Stale':''}</p></div>)}</div>}
   </article>;})}</div>

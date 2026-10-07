@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fixtures from './fixtures/radar.cjs';
-import {defaults,reviewCounts,selectDiscoveries,statusOf,researchIdentity,resolveResearchTarget,safeUrl,isNewGem} from '../lib/radar/view.mjs';
+import {defaults,reviewActions,reviewCounts,selectDiscoveries,statusOf,researchIdentity,resolveResearchTarget,safeUrl,isNewGem} from '../lib/radar/view.mjs';
 const records=fixtures.response.discoveries;
 test('default visibility prioritizes crypto and preserves unclassified-only cache',()=>{assert(selectDiscoveries(records,defaults()).every(d=>['CRYPTO_RELEVANT','POSSIBLY_CRYPTO'].includes(statusOf(d))));assert.equal(selectDiscoveries([records[3]],defaults()).length,1);});
 test('classification filters reveal all stored states',()=>{for(const status of ['CRYPTO_RELEVANT','POSSIBLY_CRYPTO','NON_CRYPTO','UNCLASSIFIED'])assert(selectDiscoveries(records,{...defaults(),statuses:[status]}).every(d=>statusOf(d)===status));});
@@ -99,4 +99,35 @@ test('filtering sorting and counts are read-only',()=>{
  const before=JSON.stringify(reviewRecords),filters={...defaults(),reviewStates:['NEW','DISMISSED']},filterBefore=JSON.stringify(filters);
  for(const sort of ['newest','oldest','reviewPriority','flag','confidence','lead','funding'])selectDiscoveries(reviewRecords,filters,'',sort);
  reviewCounts(reviewRecords);assert.equal(JSON.stringify(reviewRecords),before);assert.equal(JSON.stringify(filters),filterBefore);
+});
+
+const transitions={NEW:[['Mark Seen','SEEN'],['Mark Reviewed','REVIEWED'],['Dismiss','DISMISSED']],SEEN:[['Mark New','NEW'],['Mark Reviewed','REVIEWED'],['Dismiss','DISMISSED']],REVIEWED:[['Reopen Review','SEEN'],['Dismiss','DISMISSED']],DISMISSED:[['Restore to Review','NEW']]};
+for(const [state,expected] of Object.entries(transitions))test(`contextual ${state} actions are exact, ordered, fresh and omit no-ops`,()=>{
+ assert.deepEqual(reviewActions(state),expected.map(([label,state])=>({label,state})));
+ assert(reviewActions(state).every(action=>action.state!==state));
+ const actions=reviewActions(state);actions.reverse();actions[0].label='changed';
+ assert.deepEqual(reviewActions(state),expected.map(([label,state])=>({label,state})));
+});
+test('missing and unknown review states fail closed',()=>{for(const state of [undefined,null,'','UNKNOWN','new','toString','__proto__'])assert.deepEqual(reviewActions(state),[]);});
+test('successful fixture state transition updates counts and naturally leaves filtered results without changing classification or identity',()=>{
+ const before=structuredClone(reviewRecords),project=before.find(d=>d.reviewState==='REVIEWED');
+ const filters={...defaults(),reviewStates:['REVIEWED']};assert(ids(selectDiscoveries(before,filters)).includes(project.id));
+ const after=before.map(d=>d.id===project.id?{...d,reviewState:'SEEN'}:d);
+ assert.deepEqual(reviewCounts(after),{NEW:2,SEEN:3,REVIEWED:1,DISMISSED:2});
+ assert(!ids(selectDiscoveries(after,filters)).includes(project.id));
+ assert.deepEqual(after.find(d=>d.id===project.id),{...project,reviewState:'SEEN'});
+ assert.deepEqual(ids(selectDiscoveries(after,{...defaults(),classificationNeedsReview:true})),ids(selectDiscoveries(before,{...defaults(),classificationNeedsReview:true})));
+});
+test('component contract uses contextual labels, explicit local confirmation and independent review locks',async()=>{
+ const {readFile}=await import('node:fs/promises');const code=await readFile(new URL('../components/CaptainsRadar.tsx',import.meta.url),'utf8');
+ assert.match(code,/reviewActions\(d.reviewState\)\.map/);assert.match(code,/\{action.label\}/);assert.match(code,/REVIEW_LABELS\[d.reviewState/);
+ assert.match(code,/if\(action.state==='DISMISSED'\)setDismissConfirm/);
+ assert.match(code,/dismissConfirm.includes\(d.id\)/);assert.match(code,/onClick=\{\(\)=>review\(d,'DISMISSED'\)\}>Confirm dismiss/);
+ assert.match(code,/onClick=\{\(\)=>setDismissConfirm\(v=>v.filter\(id=>id!==d.id\)\)\}>Cancel/);
+ assert.match(code,/reviewLocks.current.has\(d.id\)/);assert.match(code,/reviewLocks.current.add\(d.id\)/);assert.match(code,/finally\{reviewLocks.current.delete\(d.id\)/);
+ assert.match(code,/disabled=\{reviewBusy.includes\(d.id\)\}/);assert.match(code,/role="status" aria-live="polite"/);
+ const review=code.slice(code.indexOf(' async function review('),code.indexOf('\n const records='));
+ assert(review.indexOf("setReviewMessages(v=>({...v,[d.id]:''}))")<review.indexOf('await fetch'));
+ assert(review.indexOf('await r.json()')<review.indexOf('setData('));assert.match(review,/\{\.\.\.item,reviewState:result.state\}/);
+ assert.doesNotMatch(review,/setErrors|setBusy|classification:/);
 });
