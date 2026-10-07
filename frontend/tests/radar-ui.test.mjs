@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fixtures from './fixtures/radar.cjs';
-import {defaults,reviewActions,reviewCounts,selectDiscoveries,statusOf,researchIdentity,resolveResearchTarget,safeUrl,isNewGem} from '../lib/radar/view.mjs';
+import {classificationAction,classificationCacheLabel,defaults,reviewActions,reviewCounts,selectDiscoveries,statusOf,researchIdentity,resolveResearchTarget,safeUrl,isNewGem} from '../lib/radar/view.mjs';
 const records=fixtures.response.discoveries;
 test('default visibility prioritizes crypto and preserves unclassified-only cache',()=>{assert(selectDiscoveries(records,defaults()).every(d=>['CRYPTO_RELEVANT','POSSIBLY_CRYPTO'].includes(statusOf(d))));assert.equal(selectDiscoveries([records[3]],defaults()).length,1);});
 test('classification filters reveal all stored states',()=>{for(const status of ['CRYPTO_RELEVANT','POSSIBLY_CRYPTO','NON_CRYPTO','UNCLASSIFIED'])assert(selectDiscoveries(records,{...defaults(),statuses:[status]}).every(d=>statusOf(d)===status));});
@@ -130,4 +130,81 @@ test('component contract uses contextual labels, explicit local confirmation and
  assert(review.indexOf("setReviewMessages(v=>({...v,[d.id]:''}))")<review.indexOf('await fetch'));
  assert(review.indexOf('await r.json()')<review.indexOf('setData('));assert.match(review,/\{\.\.\.item,reviewState:result.state\}/);
  assert.doesNotMatch(review,/setErrors|setBusy|classification:/);
+});
+
+
+for(const status of ['CRYPTO_RELEVANT','POSSIBLY_CRYPTO','NON_CRYPTO'])test(`classification action refreshes usable ${status} and retries stale retained evidence`,()=>{
+ const input={classification:{status},classificationCache:{status:'FRESH'}};
+ assert.deepEqual([classificationAction(input).label,classificationAction(input).mode,classificationAction(input).refresh],['Refresh Classification','REFRESH',true]);
+ for(const extra of [{classificationCache:{status:'STALE'}},{classificationFailed:true}]){
+  const action=classificationAction({...input,...extra});assert.deepEqual([action.label,action.mode,action.refresh],['Retry Classification','RETRY',true]);
+ }
+});
+test('first classification and missing metadata fail safely without inventing freshness',()=>{
+ for(const input of [undefined,null,{}, {classificationStatus:'UNCLASSIFIED'}, {classification:{status:'UNCLASSIFIED'},classificationCache:{status:'STALE'}}, {classificationStatus:'UNKNOWN'}]){
+  const action=classificationAction(input);assert.deepEqual([action.label,action.mode,action.refresh,action.disabled],['Classify','CLASSIFY',false,false]);assert(action.reason);
+ }
+ for(const status of [undefined,'UNKNOWN','toString','__proto__']){
+  const input={classification:{status:'CRYPTO_RELEVANT'},classificationCache:{status}};
+  assert.equal(classificationCacheLabel(input),null);assert.equal(classificationAction(input).mode,'REFRESH');
+ }
+ assert.equal(classificationCacheLabel({}),null);
+ for(const [status,label] of [['FRESH','Fresh'],['STALE','Stale'],['MISS','Not classified']])assert.equal(classificationCacheLabel({classificationCache:{status}}),label);
+});
+test('classification action is deterministic pure and independent of review state',()=>{
+ const input=Object.freeze({classification:Object.freeze({status:'POSSIBLY_CRYPTO',needsReview:true}),classificationCache:Object.freeze({status:'STALE'})});
+ const before=JSON.stringify(input),expected=classificationAction(input);
+ for(const reviewState of ['NEW','SEEN','REVIEWED','DISMISSED',undefined,'UNKNOWN'])assert.deepEqual(classificationAction({...input,reviewState}),expected);
+ assert.deepEqual(classificationAction(input),expected);assert.equal(JSON.stringify(input),before);
+ expected.label='changed';assert.equal(classificationAction(input).label,'Retry Classification');
+});
+async function classificationHarness() {
+ const {readFile}=await import('node:fs/promises');
+ const code=await readFile(new URL('../components/CaptainsRadar.tsx',import.meta.url),'utf8');
+ const body=code.slice(code.indexOf(' async function classify('),code.indexOf(' async function review('));
+ const {createRequire}=await import('node:module');const ts=createRequire(import.meta.url)('typescript');
+ const compiled=ts.transpileModule(body,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+ const project=structuredClone(records[0]);project.reviewState='REVIEWED';
+ const state={data:{discoveries:[project,{...project,id:'other'}]},busy:[],errors:{a:'old error'},messages:{a:'old status'}};
+ const locks={current:new Set()};const requests=[];
+ const fetch=async(url,options)=>new Promise(resolve=>requests.push({url,options,resolve}));
+ const setter=key=>fn=>{state[key]=fn(state[key]);};
+ const classify=new Function('classificationAction','classificationLocks','setBusy','setErrors','setClassificationMessages','fetch','LABELS','setData',compiled+';return classify;')(classificationAction,locks,setter('busy'),setter('errors'),setter('messages'),fetch,{CRYPTO_RELEVANT:'Crypto Relevant',POSSIBLY_CRYPTO:'Possibly Crypto',NON_CRYPTO:'Non-Crypto',UNCLASSIFIED:'Unclassified'},setter('data'));
+ return {code,body,state,locks,requests,classify,project};
+}
+test('classification component locks only each project, clears messages and mutates only after success',async()=>{
+ const h=await classificationHarness(),before=structuredClone(h.state.data);
+ const pending=h.classify(h.project);await h.classify(h.project);
+ assert.equal(h.requests.length,1);assert.equal(h.state.errors.a,'');assert.equal(h.state.messages.a,'');assert.deepEqual(h.state.data,before);
+ assert.deepEqual(JSON.parse(h.requests[0].options.body),{ids:['a'],refresh:true});
+ const other=h.classify(h.state.data.discoveries[1]);assert.equal(h.requests.length,2);assert.deepEqual(h.state.busy,['a','other']);
+ const result={id:'a',status:'CLASSIFIED',classification:{...h.project.classification,status:'POSSIBLY_CRYPTO'},classificationEvidence:[],classificationCache:{status:'FRESH'}};
+ h.requests[0].resolve({ok:true,json:async()=>({results:[result]})});await pending;
+ assert.equal(h.state.data.discoveries[0].classification.status,'POSSIBLY_CRYPTO');assert.equal(h.state.data.discoveries[0].reviewState,'REVIEWED');assert.match(h.state.messages.a,/successfully/);assert.deepEqual(h.state.busy,['other']);
+ h.requests[1].resolve({ok:false});await other;assert.equal(h.locks.current.size,0);
+});
+test('failed refresh retains exact local result, sanitized feedback and retry remains explicit',async()=>{
+ const h=await classificationHarness(),before=structuredClone(h.state.data);
+ const pending=h.classify(h.project);
+ h.requests[0].resolve({ok:true,json:async()=>({results:[{id:'a',status:'FAILED',classification:{status:'UNCLASSIFIED'},error:'private provider stack'}]})});await pending;
+ assert.deepEqual(h.state.data,before);assert.equal(h.state.errors.a,'Classification refresh failed. Earlier classification retained.');assert.equal(h.state.messages.a,'');
+ assert.equal(classificationAction({...h.project,classificationFailed:true}).mode,'RETRY');
+ const retry=h.classify(h.project);assert.equal(h.state.errors.a,'');assert.equal(JSON.parse(h.requests[1].options.body).refresh,true);
+ h.requests[1].resolve({ok:false});await retry;assert.deepEqual(h.state.data,before);
+});
+test('first classify sends refresh false and failure keeps unclassified project intact',async()=>{
+ const h=await classificationHarness(),project={...h.project,classification:null,classificationStatus:'UNCLASSIFIED'};
+ h.state.data.discoveries[0]=project;const before=structuredClone(h.state.data),pending=h.classify(project);
+ assert.equal(JSON.parse(h.requests[0].options.body).refresh,false);
+ h.requests[0].resolve({ok:false});await pending;assert.deepEqual(h.state.data,before);assert.equal(h.state.errors.a,'Classification could not be completed.');
+});
+test('classification source contract separates review, research and monitoring controls',async()=>{
+ const {code,body}=await classificationHarness();
+ assert.match(body,/refresh:action.refresh/);assert.match(body,/classificationAction\(d\)/);
+ assert.doesNotMatch(body,/reviewBusy|reviewLocks|setReview|reviewState:|radar\/refresh|radar\/monitor/);
+ assert.equal((body.match(/await fetch/g)||[]).length,1);
+ assert.match(code,/disabled=\{busy.includes\(d.id\)\|\|action.disabled\}/);
+ assert.match(code,/disabled=\{!identity\}/);assert.match(code,/disabled=\{reviewBusy.includes\(d.id\)\}/);
+ assert.match(code,/classificationFailed:Boolean\(errors\[d.id\]\)/);
+ assert.match(code,/Evidence status: \{cacheLabel\}/);assert.match(code,/Classification: \{LABELS/);
 });

@@ -214,3 +214,39 @@ test('review workflow reverses through all states preserving project, events and
   assert.deepEqual(await recreated.getProject(id),project);assert.deepEqual(await recreated.listClassifications(id),history);assert.deepEqual(await recreated.listDiscoveryEvents(),events);
  }
 });
+
+test('manual refresh appends history; failed refresh retains latest and operator review state',async()=>{
+ const {createClassificationService}=await import('../lib/radar/classification.mjs');
+ const repo=new InMemoryRadarRepository(),id='manual-project',at=new Date(start);
+ await repo.upsertProject({id,identityKeys:['x:manual'],projectHandle:'manual',projectWebsite:'https://manual.example/',firstSeenAt:start});
+ await repo.appendDiscoveryEvent({projectId:id,eventId:'fixture-event',contentFingerprint:'fixture-fingerprint',source:'FrontRun Website',evidence:{eventId:'fixture-event'},founderNames:[],founderHandles:[]});
+ const events=await repo.listDiscoveryEvents();
+ await repo.updateReviewState(id,'REVIEWED');
+ let clock=at,fail=false,weak=false;
+ const service=createClassificationService({now:()=>clock,collect:async()=>{
+  if(fail)throw Error('private provider error');if(weak)return [];
+  return [{sourceType:'OFFICIAL',sourceUrl:'https://manual.example/',title:'Product',snippet:clock===at?'Our roadmap plans blockchain integration.':'Our product uses blockchain.',verification:'VERIFIED',checkedAt:clock.toISOString()}];
+ }});
+ const discovery={...(await repo.getProject(id)),evidence:[]};
+ async function manual(refresh){
+  const result=(await service.batch([discovery],{refresh})).results[0];
+  await repo.transaction(tx=>persistClassification(tx,id,result,clock));
+  assert.equal((await repo.getReviewState(id)).state,'REVIEWED');return result;
+ }
+ assert.equal((await manual(false)).status,'CLASSIFIED');
+ const first=await repo.listClassifications(id);assert.equal(first.length,1);assert.equal(first[0].classification.status,'POSSIBLY_CRYPTO');
+ clock=new Date(at.getTime()+60000);assert.equal((await manual(true)).status,'CLASSIFIED');
+ const history=await repo.listClassifications(id);assert.equal(history.length,2);assert.deepEqual(history[0],first[0]);assert.equal(history[1].classification.status,'CRYPTO_RELEVANT');
+ assert(clock>new Date(history[0].classification.classifiedAt));
+ const latest=await repo.getClassification(id);assert.deepEqual(latest,history[1]);
+ const recreated=new InMemoryRadarRepository(repo.store);
+ assert.deepEqual(await recreated.listClassifications(id),history);
+ assert.equal((await readRadar(recreated)).discoveries[0].classification.status,'CRYPTO_RELEVANT');
+ for(const kind of ['throw','insufficient']){
+  fail=kind==='throw';weak=kind==='insufficient';
+  const failed=await manual(true);assert.equal(failed.status,'FAILED');assert.equal(failed.classification.status,'CRYPTO_RELEVANT');
+  assert.deepEqual(await recreated.listClassifications(id),history);assert.deepEqual(await recreated.getClassification(id),latest);
+  assert.equal((await readRadar(recreated)).discoveries[0].reviewState,'REVIEWED');
+ }
+ assert.equal(await repo.getLatestMonitoringRun(),null);assert.deepEqual(await repo.listDiscoveryEvents(),events);
+});

@@ -78,3 +78,23 @@ export function selectDiscoveries(records, filters, search='', sort='newest', no
  if (sort==='reviewPriority') return result.sort((a,b)=>(priority[a.reviewState]??4)-(priority[b.reviewState]??4)||compareDates(a,b)||a.id.localeCompare(b.id));
  return result.sort((a,b)=>{const av=value(a),bv=value(b);return av==null?(bv==null?a.id.localeCompare(b.id):1):bv==null?-1:(sort==='flag'||sort==='oldest'?av-bv:bv-av)||a.id.localeCompare(b.id);});
 }
+
+/** Pure classification workflow metadata; operator review state is unrelated. */
+export function classificationAction(discovery) {
+ const d = discovery || {};
+ const usable = ['CRYPTO_RELEVANT','POSSIBLY_CRYPTO','NON_CRYPTO'].includes(statusOf(d));
+ const retry = usable && (d.classificationFailed === true || d.classificationCache?.status === 'STALE');
+ return {
+  label: usable ? (retry ? 'Retry Classification' : 'Refresh Classification') : 'Classify',
+  mode: usable ? (retry ? 'RETRY' : 'REFRESH') : 'CLASSIFY',
+  refresh: usable,
+  disabled: false,
+  reason: usable ? (retry ? 'Earlier classification retained; retry evidence collection.' : 'Refresh the existing classification explicitly.') : 'No usable classification is available.',
+ };
+}
+/** Unknown or absent cache metadata never implies freshness. */
+export function classificationCacheLabel(discovery) {
+ const labels = {FRESH:'Fresh',STALE:'Stale',MISS:'Not classified'};
+ const status = discovery?.classificationCache?.status;
+ return Object.hasOwn(labels,status) ? labels[status] : null;
+}
