@@ -186,7 +186,7 @@ test('scheduler GET fails closed, preserves scheduled metadata, and sanitizes fa
 });
 test('cron configuration and manual endpoint use intended schedule and trigger, passive route has no execution imports',async()=>{
  const {readFile}=await import('node:fs/promises');
- const config=JSON.parse(await readFile(new URL('../../vercel.json',import.meta.url),'utf8'));assert.deepEqual(config.crons,[{path:'/api/radar/cron',schedule:'0 7 * * *'}]);
+ const config=JSON.parse(await readFile(new URL('../vercel.json',import.meta.url),'utf8'));assert.deepEqual(config.crons,[{path:'/api/radar/cron',schedule:'0 7 * * *'}]);
  const manual=await readFile(new URL('../app/api/radar/monitor/route.ts',import.meta.url),'utf8');assert.match(manual,/trigger:'MANUAL'/);
  for(const path of ['../app/api/radar/cron/route.ts','../app/api/radar/route.ts'])assert.doesNotMatch(await readFile(new URL(path,import.meta.url),'utf8'),/genlayer|wallet|sendTransaction/i);
  assert.doesNotMatch(await readFile(new URL('../app/api/radar/route.ts',import.meta.url),'utf8'),/runRadarMonitoring|discovery|classification|tavily/i);

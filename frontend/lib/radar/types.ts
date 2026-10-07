@@ -1,3 +1,11 @@
+/** Derived research metadata only; never persisted on Radar discoveries. */
+export interface RadarResearchTarget {
+  value: string | null;
+  type: "WEBSITE" | "X" | null;
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  source: "DISCOVERY" | "PERSISTED_IDENTITY" | "VERIFIED_EVIDENCE" | "NONE";
+  reason: string;
+}
 /** Read-only source claims. These are independent of the onchain analysis schema. */
 export interface RadarEvidence {
   eventId: string;
