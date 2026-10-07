@@ -49,12 +49,22 @@ export function resolveResearchTarget(discovery) {
 export function researchIdentity(d) {return resolveResearchTarget(d).value;}
 // New Gem requires an explicit source date within 30 days, never retrieval time.
 export function isNewGem(d, now=Date.now()) {const time=Date.parse(d.frontRunFlaggedAt || d.sourcePublishedAt);return statusOf(d)==='CRYPTO_RELEVANT'&&Number.isFinite(time)&&time<=now&&now-time<=30*86400000;}
-export const defaults = () => ({statuses:['CRYPTO_RELEVANT','POSSIBLY_CRYPTO'],network:'',source:'',review:false,funding:false,recent:false});
+export const REVIEW_LABELS = {NEW:'New to Review',SEEN:'Seen',REVIEWED:'Reviewed',DISMISSED:'Dismissed'};
+/** Counts only stored review states; missing states are never inferred. */
+export function reviewCounts(records) {
+ const counts = {NEW:0,SEEN:0,REVIEWED:0,DISMISSED:0};
+ for (const d of records) if (Object.hasOwn(counts,d.reviewState)) counts[d.reviewState]++;
+ return counts;
+}
+export const defaults = () => ({statuses:['CRYPTO_RELEVANT','POSSIBLY_CRYPTO'],network:'',source:'',reviewStates:/** @type {string[]} */ ([]),classificationNeedsReview:false,funding:false,recent:false});
 export function selectDiscoveries(records, filters, search='', sort='newest', now=Date.now()) {
  const allUnclassified=records.length>0&&records.every(d=>statusOf(d)==='UNCLASSIFIED');
  const statuses=allUnclassified&&filters.statuses.join(',')===defaults().statuses.join(',')?['UNCLASSIFIED']:filters.statuses;
- const result=records.filter(d=>statuses.includes(statusOf(d))&&(!filters.network||d.classification?.networks?.includes(filters.network))&&(!filters.source||d.evidence.some(e=>e.source===filters.source))&&(!filters.review||d.classification?.needsReview)&&(!filters.funding||d.fundingMention)&&(!filters.recent||(Number.isFinite(Date.parse(d.discoveredAt))&&now-Date.parse(d.discoveredAt)>=0&&now-Date.parse(d.discoveredAt)<=30*86400000))&&[d.projectName,d.projectHandle,d.rawCategory,d.classification?.reason,...(d.classification?.networks||[])].join(' ').toLowerCase().includes(search.toLowerCase().trim()));
+ const result=records.filter(d=>statuses.includes(statusOf(d))&&(!filters.network||d.classification?.networks?.includes(filters.network))&&(!filters.source||d.evidence.some(e=>e.source===filters.source))&&(!filters.reviewStates?.length||filters.reviewStates.includes(d.reviewState))&&(!filters.classificationNeedsReview||d.classification?.needsReview)&&(!filters.funding||d.fundingMention)&&(!filters.recent||(Number.isFinite(Date.parse(d.discoveredAt))&&now-Date.parse(d.discoveredAt)>=0&&now-Date.parse(d.discoveredAt)<=30*86400000))&&[d.projectName,d.projectHandle,d.rawCategory,d.classification?.reason,...(d.classification?.networks||[])].join(' ').toLowerCase().includes(search.toLowerCase().trim()));
  const date=v=>Number.isFinite(Date.parse(v))?Date.parse(v):null;
  const value=d=>sort==='confidence'?d.classification?.confidence:sort==='lead'?d.frontRunLeadTimeDays:sort==='funding'?Number(Boolean(d.fundingMention)):date(sort==='flag'?d.frontRunFlaggedAt:d.discoveredAt);
- return result.sort((a,b)=>{const av=value(a),bv=value(b);return av==null?(bv==null?a.id.localeCompare(b.id):1):bv==null?-1:(sort==='flag'?av-bv:bv-av)||a.id.localeCompare(b.id);});
+ const priority = {NEW:0,SEEN:1,REVIEWED:2,DISMISSED:3};
+ const compareDates = (a,b) => {const av=date(a.discoveredAt),bv=date(b.discoveredAt);return av==null?(bv==null?0:1):bv==null?-1:bv-av;};
+ if (sort==='reviewPriority') return result.sort((a,b)=>(priority[a.reviewState]??4)-(priority[b.reviewState]??4)||compareDates(a,b)||a.id.localeCompare(b.id));
+ return result.sort((a,b)=>{const av=value(a),bv=value(b);return av==null?(bv==null?a.id.localeCompare(b.id):1):bv==null?-1:(sort==='flag'||sort==='oldest'?av-bv:bv-av)||a.id.localeCompare(b.id);});
 }
